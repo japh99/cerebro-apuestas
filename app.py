@@ -23,9 +23,9 @@ CACHE_FILE = "team_stats_cache.json"
 
 # --- CARGAR MODELOS ---
 try:
-    # Asegúrate que estos nombres sean IGUALES a los archivos que subiste
-    btts_model = joblib.load('modelo_btts.joblib')
-    modelo_ou = joblib.load('modelo_ou.joblib')
+    # Nombres corregidos:
+    modelo_btts = joblib.load('btts_model.joblib')
+    modelo_ou = joblib.load('ou_model.joblib')
     print("✅ Modelos cargados correctamente")
 except Exception as e:
     print(f"❌ Error cargando modelos: {e}")
@@ -189,4 +189,5 @@ def predecir():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+
 
