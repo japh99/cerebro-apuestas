@@ -13,7 +13,7 @@ CORS(app)
 
 # --- CONFIGURACIÓN (¡EDITA ESTO!) ---
 # Pon tu API Key de API-Football aquí abajo:
-API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc" 
+API_FOOTBALL_KEY = "79e962c0afc2840a769bff958efc28d2" 
 
 HEADERS = {
     'x-rapidapi-host': "v3.football.api-sports.io",
@@ -189,5 +189,6 @@ def predecir():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+
 
 
