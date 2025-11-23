@@ -7,3 +7,4 @@ pandas
 requests
 gunicorn
 xgboost
+google-generativeai
