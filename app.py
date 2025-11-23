@@ -7,19 +7,19 @@ import joblib
 import pandas as pd
 import numpy as np
 import requests
-import google.generativeai as genai # <--- NUEVO INGREDIENTE
+import google.generativeai as genai # <--- El ingrediente secreto
 
 app = Flask(__name__)
 CORS(app)
 
 # ==========================================
-# ⚙️ TUS LLAVES (EN EL SERVIDOR)
+# 🔐 TUS LLAVES (PÉGALAS AQUÍ CON CUIDADO)
 # ==========================================
 API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
 GOOGLE_API_KEY = "AIzaSyDxLlhq_5kl8ZQ-vk-UMm_gYKhV6vzMKDE" 
 # ==========================================
 
-# Configurar Google
+# Configurar Google dentro del servidor
 genai.configure(api_key=GOOGLE_API_KEY)
 
 HEADERS = {
@@ -28,17 +28,17 @@ HEADERS = {
 }
 CACHE_FILE = "team_stats_cache.json"
 
-# Cargar Modelos (Si fallan, usamos dummy para que no se caiga el server)
+# Cargar Modelos (Modo seguro anti-caídas)
 try:
     modelo_btts = joblib.load('modelo_btts.joblib')
     modelo_ou = joblib.load('modelo_ou.joblib')
     print("✅ Modelos cargados.")
 except:
-    print("⚠️ Modelos no encontrados, usando modo seguro.")
+    print("⚠️ Modelos no encontrados, usando modo simulación.")
     modelo_btts = None
     modelo_ou = None
 
-# --- SISTEMA DE CACHÉ (Igual que antes) ---
+# --- SISTEMA DE CACHÉ ---
 def load_cache():
     if os.path.exists(CACHE_FILE):
         try: return json.load(open(CACHE_FILE))
@@ -50,10 +50,11 @@ def save_cache(data):
 
 def obtener_stats(equipo):
     cache = load_cache()
-    key = f"{equipo}_{time.strftime('%Y-%m-%d')}"
-    if key in cache: return cache[key]
+    # Usamos solo el nombre como clave para simplificar
+    if equipo in cache: return cache[equipo]
     
     try:
+        print(f"Buscando stats para {equipo}...")
         url = f"https://v3.football.api-sports.io/teams?name={equipo}"
         res = requests.get(url, headers=HEADERS).json()
         if not res['response']: return {'shots': 10, 'corners': 5}
@@ -62,71 +63,76 @@ def obtener_stats(equipo):
         url_fix = f"https://v3.football.api-sports.io/fixtures?team={id_eq}&last=5&status=FT"
         matches = requests.get(url_fix, headers=HEADERS).json()['response']
         
-        shots = corners = count = 0
+        shots = 0
+        corners = 0
+        count = 0
         for m in matches:
             stats = m.get('statistics', [])
+            if not stats: continue
+            # Buscar stats del equipo correcto
             my_stats = next((s for s in stats if s['team']['id'] == id_eq), None)
             if my_stats:
-                shots += next((i['value'] for i in my_stats['statistics'] if i['type']=='Total Shots'), 0) or 0
-                corners += next((i['value'] for i in my_stats['statistics'] if i['type']=='Corner Kicks'), 0) or 0
+                s = next((i['value'] for i in my_stats['statistics'] if i['type']=='Total Shots'), 0) or 0
+                c = next((i['value'] for i in my_stats['statistics'] if i['type']=='Corner Kicks'), 0) or 0
+                shots += s
+                corners += c
                 count += 1
         
         final = {'shots': round(shots/max(1,count),1), 'corners': round(corners/max(1,count),1)}
-        cache[key] = final
+        cache[equipo] = final
         save_cache(cache)
         return final
-    except:
+    except Exception as e:
+        print(f"Error API Football: {e}")
         return {'shots': 10, 'corners': 5}
 
-# --- RUTA MAESTRA: CALCULA Y PREGUNTA A LA IA ---
+# --- RUTA 1: SINCRONIZAR (Guardar stats) ---
+@app.route('/sincronizar-cache', methods=['POST'])
+def sync():
+    data = request.json
+    partidos = data.get('partidos', [])
+    procesados = 0
+    for p in partidos:
+        try:
+            obtener_stats(p['home_team'])
+            obtener_stats(p['away_team'])
+            procesados += 1
+        except: pass
+    return jsonify({"status": "ok", "procesados": procesados})
+
+# --- RUTA 2: ANALIZAR COMPLETO (La Magia) ---
 @app.route('/analizar_completo', methods=['POST'])
 def analizar_completo():
     data = request.json
     home = data.get('home_team')
     away = data.get('away_team')
-    odd_home = float(data.get('odd_home', 2.0))
-    odd_away = float(data.get('odd_away', 2.0))
+    odd_home = data.get('odd_home')
+    odd_away = data.get('odd_away')
     
-    # 1. Obtener Stats Reales
+    # 1. Stats Reales
     stats_h = obtener_stats(home)
     stats_a = obtener_stats(away)
     
-    # 2. Predicción Matemática (Simulada si no hay modelo)
-    prob_btts = 50
-    prob_over = 50
-    if modelo_btts:
-        # Aquí iría tu lógica de DataFrame compleja.
-        # Por simplicidad para que funcione YA, usamos una heurística basada en cuotas + stats
-        # (Puedes pegar tu lógica de DataFrame aquí si quieres, pero probemos conexión primero)
-        pass 
-
-    # 3. LLAMAR A GOOGLE GEMINI (DESDE EL SERVIDOR)
+    # 2. Predicción IA (Google Gemini desde el Servidor)
     try:
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-pro') # Usamos el modelo estable
         prompt = f"""
-        Eres BetSmart AI.
-        Partido: {home} vs {away}
-        Cuotas: {odd_home} vs {odd_away}
-        Stats {home}: {stats_h['shots']} tiros, {stats_h['corners']} corners.
-        Stats {away}: {stats_a['shots']} tiros, {stats_a['corners']} corners.
+        Analiza este partido de fútbol: {home} vs {away}.
+        Cuotas: Local {odd_home}, Visitante {odd_away}.
+        Stats {home}: {stats_h['shots']} tiros/p, {stats_h['corners']} corners/p.
+        Stats {away}: {stats_a['shots']} tiros/p, {stats_a['corners']} corners/p.
         
-        Dame una predicción corta (Stake 1-10).
+        Dame una predicción MUY BREVE (Stake 1-10).
         """
         response = model.generate_content(prompt)
         ai_text = response.text
     except Exception as e:
-        ai_text = f"Error IA: {str(e)}"
+        ai_text = f"Error conectando con Google desde USA: {str(e)}"
 
     return jsonify({
         "stats": {"home": stats_h, "away": stats_a},
         "ai_analysis": ai_text
     })
-
-# --- RUTA SINCRONIZAR ---
-@app.route('/sincronizar-cache', methods=['POST'])
-def sync():
-    # Tu misma lógica de siempre para guardar stats
-    return jsonify({"status": "ok"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
