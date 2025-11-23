@@ -7,20 +7,15 @@ import joblib
 import pandas as pd
 import numpy as np
 import requests
-import google.generativeai as genai # <--- El ingrediente secreto
 
 app = Flask(__name__)
 CORS(app)
 
 # ==========================================
-# 🔐 TUS LLAVES (PÉGALAS AQUÍ CON CUIDADO)
+# 🔐 SOLO NECESITAS LA KEY DE FUTBOL AHORA
 # ==========================================
 API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
-GOOGLE_API_KEY = "AIzaSyDxLlhq_5kl8ZQ-vk-UMm_gYKhV6vzMKDE" 
 # ==========================================
-
-# Configurar Google dentro del servidor
-genai.configure(api_key=GOOGLE_API_KEY)
 
 HEADERS = {
     'x-rapidapi-host': "v3.football.api-sports.io",
@@ -28,13 +23,13 @@ HEADERS = {
 }
 CACHE_FILE = "team_stats_cache.json"
 
-# Cargar Modelos (Modo seguro anti-caídas)
+# Cargar Modelos
 try:
     modelo_btts = joblib.load('modelo_btts.joblib')
     modelo_ou = joblib.load('modelo_ou.joblib')
-    print("✅ Modelos cargados.")
+    print("✅ Modelos matemáticos cargados.")
 except:
-    print("⚠️ Modelos no encontrados, usando modo simulación.")
+    print("⚠️ Modelos no encontrados, usando simulación.")
     modelo_btts = None
     modelo_ou = None
 
@@ -50,11 +45,9 @@ def save_cache(data):
 
 def obtener_stats(equipo):
     cache = load_cache()
-    # Usamos solo el nombre como clave para simplificar
     if equipo in cache: return cache[equipo]
     
     try:
-        print(f"Buscando stats para {equipo}...")
         url = f"https://v3.football.api-sports.io/teams?name={equipo}"
         res = requests.get(url, headers=HEADERS).json()
         if not res['response']: return {'shots': 10, 'corners': 5}
@@ -69,7 +62,6 @@ def obtener_stats(equipo):
         for m in matches:
             stats = m.get('statistics', [])
             if not stats: continue
-            # Buscar stats del equipo correcto
             my_stats = next((s for s in stats if s['team']['id'] == id_eq), None)
             if my_stats:
                 s = next((i['value'] for i in my_stats['statistics'] if i['type']=='Total Shots'), 0) or 0
@@ -82,56 +74,48 @@ def obtener_stats(equipo):
         cache[equipo] = final
         save_cache(cache)
         return final
-    except Exception as e:
-        print(f"Error API Football: {e}")
+    except:
         return {'shots': 10, 'corners': 5}
 
-# --- RUTA 1: SINCRONIZAR (Guardar stats) ---
 @app.route('/sincronizar-cache', methods=['POST'])
 def sync():
     data = request.json
     partidos = data.get('partidos', [])
-    procesados = 0
     for p in partidos:
         try:
             obtener_stats(p['home_team'])
             obtener_stats(p['away_team'])
-            procesados += 1
         except: pass
-    return jsonify({"status": "ok", "procesados": procesados})
+    return jsonify({"status": "ok"})
 
-# --- RUTA 2: ANALIZAR COMPLETO (La Magia) ---
+# --- RUTA DE CÁLCULO MATEMÁTICO ---
 @app.route('/analizar_completo', methods=['POST'])
 def analizar_completo():
     data = request.json
     home = data.get('home_team')
     away = data.get('away_team')
-    odd_home = data.get('odd_home')
-    odd_away = data.get('odd_away')
     
-    # 1. Stats Reales
+    # 1. Stats Reales (API Football)
     stats_h = obtener_stats(home)
     stats_a = obtener_stats(away)
     
-    # 2. Predicción IA (Google Gemini desde el Servidor)
-    try:
-        model = genai.GenerativeModel('gemini-pro') # Usamos el modelo estable
-        prompt = f"""
-        Analiza este partido de fútbol: {home} vs {away}.
-        Cuotas: Local {odd_home}, Visitante {odd_away}.
-        Stats {home}: {stats_h['shots']} tiros/p, {stats_h['corners']} corners/p.
-        Stats {away}: {stats_a['shots']} tiros/p, {stats_a['corners']} corners/p.
-        
-        Dame una predicción MUY BREVE (Stake 1-10).
-        """
-        response = model.generate_content(prompt)
-        ai_text = response.text
-    except Exception as e:
-        ai_text = f"Error conectando con Google desde USA: {str(e)}"
-
+    # 2. Predicción Matemática (Simulación de tus modelos .joblib)
+    # Aquí iría la lógica real de pandas con tus modelos cargados.
+    # Por ahora devolvemos la probabilidad basada en stats para que funcione el prompt.
+    
+    # Lógica simple: Si disparan mucho, probabilidad alta.
+    power_h = stats_h['shots'] + stats_h['corners']
+    power_a = stats_a['shots'] + stats_a['corners']
+    
+    prob_btts = 65 if (power_h > 12 and power_a > 12) else 40
+    prob_over = 70 if (power_h + power_a) > 25 else 45
+    
     return jsonify({
         "stats": {"home": stats_h, "away": stats_a},
-        "ai_analysis": ai_text
+        "math_prediction": {
+            "btts_prob": prob_btts,
+            "over_prob": prob_over
+        }
     })
 
 if __name__ == '__main__':
