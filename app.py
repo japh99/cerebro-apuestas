@@ -25,11 +25,12 @@ CACHE_FILE = "team_stats_cache.json"
 
 # --- 1. CARGAR MODELOS REALES ---
 try:
-    modelo_btts = joblib.load('modelo_btts.joblib')
-    modelo_ou = joblib.load('modelo_ou.joblib')
+    # CORRECCIÓN: Usamos los nombres exactos que tienes en la foto
+    modelo_btts = joblib.load('btts_model.joblib')  # <--- CAMBIADO
+    modelo_ou = joblib.load('ou_model.joblib')      # <--- CAMBIADO
     print("✅ Modelos .joblib cargados correctamente.")
-except:
-    print("❌ ERROR CRÍTICO: No se encontraron los archivos .joblib")
+except Exception as e:
+    print(f"❌ ERROR CRÍTICO: {str(e)}")
     modelo_btts = None
     modelo_ou = None
 
@@ -186,3 +187,4 @@ def analizar_completo():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+
