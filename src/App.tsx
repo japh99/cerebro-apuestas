@@ -4,7 +4,7 @@ import {
   Activity, RefreshCw, Zap, Search, Copy, Check, 
   Calendar, Globe, Wallet, TrendingUp, BarChart3, 
   ChevronRight, DollarSign, Shield, MousePointerClick,
-  AlertTriangle, Terminal, Cpu, Bot, FileText
+  AlertTriangle, Terminal, Cpu, Bot, FileText, Globe2
 } from 'lucide-react';
 
 // ==========================================
@@ -12,7 +12,7 @@ import {
 // ==========================================
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
-// 🔑 TUS LLAVES DE ODDS API (Asegúrate de que estén activas)
+// 🔑 TUS LLAVES DE ODDS API
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -83,7 +83,6 @@ const getRandomKey = () => {
     return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 };
 
-// Componente de Logo Interno
 const TeamLogo = ({ url, name }) => {
     if (url) {
         return <img src={url} alt={name} className="w-12 h-12 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" onError={(e) => e.currentTarget.style.display = 'none'} />;
@@ -96,17 +95,15 @@ const TeamLogo = ({ url, name }) => {
 };
 
 // ==========================================
-// 🚀 COMPONENTE PRINCIPAL (LA APP)
+// 🚀 COMPONENTE PRINCIPAL
 // ==========================================
 function App() {
-  // Estados
   const [matches, setMatches] = useState([]);
   const [status, setStatus] = useState("SISTEMA ONLINE");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   
-  // Filtros
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
@@ -117,7 +114,7 @@ function App() {
     setStatus("INICIANDO PROTOCOLO DE ESCANEO...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey || apiKey.includes("PEGA")) throw new Error("Faltan Keys");
+      if (!apiKey) throw new Error("Faltan Keys");
 
       // 1. Obtener Cuotas
       let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`;
@@ -152,7 +149,6 @@ function App() {
       });
       const dataPython = await resPython.json();
       
-      // Unir logos
       const matchesWithLogos = valid.map(m => ({
         ...m,
         home_logo: dataPython.logos?.[m.home_team] || null,
@@ -208,7 +204,7 @@ function App() {
       });
       const data = await res.json();
       
-      // === EL PROMPT PARA KIMI / GPT ===
+      // === EL PROMPT PARA KIMI / GPT (AQUÍ ESTÁ EL CAMBIO) ===
       const prompt = `📋 **ANÁLISIS TÉCNICO DE INVERSIÓN - BETSMART AI**
 
 🔹 **CONFIGURACIÓN DE CAPITAL:**
@@ -239,12 +235,20 @@ function App() {
    - **Probabilidad BTTS (Sí):** ${data.model_result.btts_prob}%
    - **Probabilidad Over 2.5:** ${data.model_result.over_prob}%
 
-📝 **INSTRUCCIONES PARA EL ASISTENTE (TU TAREA):**
+📝 **INSTRUCCIONES CRÍTICAS PARA EL ASISTENTE:**
 Actúa como un experto financiero deportivo.
-1. **Busca noticias de ÚLTIMA HORA (hoy/ayer):** Lesiones clave, sanciones o clima.
-2. **Cruza los datos:** Compara las predicciones matemáticas con las noticias.
-3. **Veredicto Final:** Dame tu pronóstico argumentado para **Over/Under 2.5** y **BTTS**.
-4. **Orden de Compra:** Indica el STAKE (1-10) y el MONTO exacto en pesos.`;
+
+1.  🚨 **PROTOCOLO DE BÚSQUEDA OBLIGATORIA:**
+    Si alguna cuota en la sección "MERCADO" aparece como **"ND"** (No Disponible), **TU PRIMERA TAREA ES BUSCAR EN GOOGLE** las cuotas actuales para ese mercado específico (Ej: "Cuota BTTS ${match.home_team} vs ${match.away_team}"). ¡No realices el análisis sin tener la cuota real!
+
+2.  **ANÁLISIS DE NOTICIAS:**
+    Busca lesiones de titulares confirmadas en las últimas 24h.
+
+3.  **CÁLCULO DE VALOR:**
+    Cruza mi modelo matemático con la cuota (la que te di o la que buscaste).
+
+4.  **ORDEN DE COMPRA:**
+    Dame el STAKE (1-10), el MONTO en pesos y la selección final.`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
@@ -261,7 +265,6 @@ Actúa como un experto financiero deportivo.
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // --- RENDERIZADO DE LA INTERFAZ ---
   return (
     <div className="min-h-screen bg-[#09090b] text-gray-200 font-sans pb-32 selection:bg-indigo-500/30">
       
@@ -287,7 +290,7 @@ Actúa como un experto financiero deportivo.
           </div>
           <div className="hidden md:block">
              <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 text-[10px] font-mono border border-indigo-500/20 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div> v12.0 ONE-FILE
+                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div> v13.0 SMART-SEARCH
              </span>
           </div>
         </div>
@@ -368,7 +371,7 @@ Actúa como un experto financiero deportivo.
                         <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-right-4">
                             <div className="bg-indigo-900/20 border border-indigo-500/20 rounded-lg p-2 text-center">
                                 <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider flex items-center justify-center gap-1">
-                                    <FileText size={10}/> Prompt Listo
+                                    <Globe2 size={10}/> Prompt + Search
                                 </div>
                             </div>
                             <div className="flex gap-2">
