@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { 
   Activity, RefreshCw, Zap, Search, Copy, Check, 
-  Calendar, Globe, Wallet, TrendingUp, BarChart2, 
-  ChevronRight, DollarSign, Shield, MousePointerClick
+  Calendar, Globe, Wallet, BarChart2, 
+  ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle
 } from 'lucide-react';
 
-// === CONFIGURACIÓN ===
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
@@ -78,7 +77,7 @@ const getRandomKey = () => {
 
 function App() {
   const [matches, setMatches] = useState([]);
-  const [status, setStatus] = useState("Sistema Listo");
+  const [status, setStatus] = useState("SISTEMA EN LINEA");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
@@ -89,42 +88,53 @@ function App() {
 
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
-    setStatus("Analizando...");
+    setStatus("BUSCANDO EVENTOS...");
     try {
       const apiKey = getRandomKey();
       if (!apiKey) throw new Error("Faltan Keys");
 
+      // 1. Odds API
       let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`;
       let res = await fetch(url);
       let rawData = await res.json();
 
       if (!res.ok || rawData.message || !Array.isArray(rawData)) {
+        console.warn("Fallback...");
         url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals&oddsFormat=decimal`;
         res = await fetch(url);
         rawData = await res.json();
       }
 
-      if (rawData.message) throw new Error(rawData.message);
-      if (!Array.isArray(rawData)) throw new Error("Error API");
+      if (!Array.isArray(rawData)) throw new Error("Error API Odds");
 
       const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
       
       if (valid.length === 0) {
-        setStatus("Sin partidos.");
+        setStatus("MERCADO CERRADO HOY.");
         return;
       }
 
-      await fetch(`${PYTHON_BACKEND_URL}/sincronizar-cache`, {
+      // 2. Sincronizar con Python y OBTENER LOGOS
+      setStatus(`PROCESANDO LOGOS E IMÁGENES...`);
+      const resPython = await fetch(`${PYTHON_BACKEND_URL}/sincronizar-cache`, {
         method: 'POST', 
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ partidos: valid })
       });
+      const dataPython = await resPython.json();
       
-      setMatches(valid);
-      setStatus(`Resultados: ${valid.length}`);
+      // 3. Unir partidos con sus logos
+      const matchesWithLogos = valid.map(m => ({
+        ...m,
+        home_logo: dataPython.logos?.[m.home_team] || null,
+        away_logo: dataPython.logos?.[m.away_team] || null
+      }));
+      
+      setMatches(matchesWithLogos);
+      setStatus(`✅ LISTO: ${valid.length} EVENTOS CONECTADOS`);
 
     } catch (e) {
-      setStatus(`Error: ${e.message}`);
+      setStatus(`❌ ERROR: ${e.message}`);
     }
   };
 
@@ -166,14 +176,32 @@ function App() {
       });
       const data = await res.json();
       
-      const prompt = `Actúa como Analista BetSmart.
-CAPITAL: $${bankroll} (Stake 1/10: $${(parseInt(bankroll)/10).toFixed(0)})
-PARTIDO: ${match.home_team} vs ${match.away_team} (${LEAGUES.find(l => l.code === selectedLeague)?.name})
-MERCADO: 1[${oddHome}] X[${oddDraw}] 2[${oddAway}] | Over[${over25}] | BTTS[${bttsYes}]
-ELO: ${data.elo.home} vs ${data.elo.away}
-STATS (5p): Local ${data.stats.home.shots} tiros, Visita ${data.stats.away.shots}.
-MODELO: BTTS ${data.model_result.btts_prob}% | Over ${data.model_result.over_prob}%
-VEREDICTO: Compara modelo vs mercado. Busca noticias. Dame la mejor apuesta y monto.`;
+      const prompt = `## 🕵️‍♂️ ROL: GESTOR DE INVERSIONES (BetSmart AI)
+
+### 1. 🏦 GESTIÓN DE CAPITAL
+- **Bankroll:** $${bankroll} COP
+- **Stake 1/10:** $${(parseInt(bankroll)/10).toFixed(0)} COP
+
+### 2. 📋 EVENTO
+- **Liga:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
+- **Partido:** ${match.home_team} vs ${match.away_team}
+
+### 3. 📊 MERCADO
+- **1X2:** 1 @${oddHome} | X @${oddDraw} | 2 @${oddAway}
+- **Goles:** Over 2.5 @${over25}
+- **BTTS:** Sí @${bttsYes}
+
+### 4. 🧠 ANÁLISIS INTERNO
+- **ELO:** Local ${data.elo.home} vs Visita ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
+- **Stats (5p):** Local ${data.stats.home.shots} tiros, Visita ${data.stats.away.shots} tiros.
+- **PREDICCIÓN IA:**
+  - BTTS: ${data.model_result.btts_prob}%
+  - Over 2.5: ${data.model_result.over_prob}%
+
+### 🎯 VEREDICTO
+1. Calcula valor.
+2. Busca lesiones.
+3. Dame la mejor apuesta y monto.`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
@@ -190,162 +218,105 @@ VEREDICTO: Compara modelo vs mercado. Busca noticias. Dame la mejor apuesta y mo
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Componente de Logo Seguro (Fallback)
+  const TeamLogo = ({ url, name }) => {
+    if (url) {
+        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
+    }
+    return (
+        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
+            {name.substring(0, 2).toUpperCase()}
+        </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-[#050505] text-gray-300 font-sans pb-32 relative">
-      
-      {/* BACKGROUND GRID (REJILLA ESTILO IMAGEN) */}
-      <div className="fixed inset-0 pointer-events-none" 
-           style={{
-             backgroundImage: 'linear-gradient(to right, #1a1a1a 1px, transparent 1px), linear-gradient(to bottom, #1a1a1a 1px, transparent 1px)',
-             backgroundSize: '40px 40px',
-             opacity: 0.3
-           }}>
-      </div>
-      <div className="fixed inset-0 bg-gradient-to-b from-transparent to-[#050505] pointer-events-none"></div>
-
-      <div className="relative z-10 max-w-4xl mx-auto p-6">
+    <div className="min-h-screen bg-[#050505] text-gray-200 font-sans pb-32">
+      <div className="max-w-4xl mx-auto p-4 md:p-8">
         
-        {/* HEADER ESTILO TARJETA FLOTANTE */}
-        <div className="flex justify-between items-center mb-8 bg-[#111] border border-white/5 p-4 rounded-2xl shadow-xl backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-500 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Activity className="text-black" size={24} strokeWidth={2.5}/>
-            </div>
-            <div>
-                <h1 className="text-xl font-extrabold text-white tracking-tight leading-none">BetSmart<span className="text-emerald-500">AI</span></h1>
-                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Professional Prediction</p>
-            </div>
-          </div>
-          <div className="hidden md:flex items-center gap-2 bg-[#1a1a1a] px-3 py-1.5 rounded-full border border-white/5">
-             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-             <span className="text-[10px] font-bold text-gray-400">Modelos ML Activos</span>
+        {/* HEADER */}
+        <div className="flex justify-between items-end mb-10 border-b border-white/10 pb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Activity className="text-emerald-500" size={28}/>
+                BetSmart <span className="text-emerald-500">VISUAL</span>
+            </h1>
+            <p className="text-xs text-slate-500 font-bold tracking-widest uppercase pl-1 mt-1">Next Gen Sports Terminal</p>
           </div>
         </div>
 
-        {/* TITULO SECCION */}
-        <div className="mb-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-2">
-                <Zap size={12}/> Próximos Eventos - IA Analysis
+        {/* DASHBOARD */}
+        <div className="bg-[#0a0a0a] rounded-xl border border-white/10 p-5 mb-8 shadow-lg">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Capital</label>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500/50 transition-colors"/>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Fecha</label>
+                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-indigo-500/50 transition-colors"/>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Mercado</label>
+                    <div className="relative">
+                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none appearance-none cursor-pointer">
+                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
+                        </select>
+                        <ChevronRight size={12} className="absolute right-3 top-3 text-slate-600 rotate-90 pointer-events-none"/>
+                    </div>
+                </div>
             </div>
-            <h2 className="text-4xl font-bold text-white mb-2">Calendario Inteligente</h2>
-            <p className="text-sm text-gray-500 max-w-xl">
-                Sistema híbrido que combina algoritmos <strong className="text-white">Random Forest</strong> con análisis semántico de noticias en tiempo real para maximizar la precisión en mercados O/U 2.5 y BTTS.
-            </p>
-        </div>
-
-        {/* PANEL DE CONTROL */}
-        <div className="bg-[#111] rounded-2xl border border-white/10 p-6 mb-10 shadow-2xl">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-              <div>
-                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Bankroll</label>
-                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-emerald-500/50 transition-colors">
-                    <Wallet size={16} className="text-emerald-500"/>
-                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="bg-transparent w-full text-white font-mono text-sm outline-none placeholder-gray-700"/>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Fecha</label>
-                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-indigo-500/50 transition-colors">
-                    <Calendar size={16} className="text-indigo-500"/>
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent w-full text-white font-sans text-sm outline-none"/>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Mercado</label>
-                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 relative focus-within:border-purple-500/50 transition-colors">
-                    <Globe size={16} className="text-purple-500"/>
-                    <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="bg-transparent w-full text-white text-sm outline-none appearance-none cursor-pointer">
-                        {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
-                    </select>
-                    <ChevronRight size={14} className="absolute right-4 text-gray-600 rotate-90 pointer-events-none"/>
-                </div>
-              </div>
-            </div>
-            <button onClick={escanear} className="w-full bg-white hover:bg-gray-200 text-black py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-[0.99]">
-              {status.includes("...") ? <RefreshCw className="animate-spin" size={18}/> : <Search size={18}/>}
-              {status.toUpperCase()}
+            <button onClick={escanear} className="w-full bg-white hover:bg-gray-200 text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all">
+                {status.includes("...") ? <RefreshCw className="animate-spin" size={18}/> : <Search size={18}/>}
+                {status}
             </button>
         </div>
 
-        {/* CARDS ESTILO IMAGEN */}
-        <div className="grid gap-6">
+        {/* CARDS CON LOGOS */}
+        <div className="grid gap-5">
           {matches.map(m => (
-            <div key={m.id} className="group bg-[#111] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all duration-300 shadow-lg relative overflow-hidden">
+            <div key={m.id} className="group bg-[#0a0a0a] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all shadow-lg relative overflow-hidden">
               
-              {/* HEADER CARD */}
-              <div className="flex justify-between items-center mb-8 relative z-10">
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                    <Trophy size={12} className="text-indigo-500"/> {LEAGUES.find(l => l.code === selectedLeague)?.name}
-                </div>
-                <div className="bg-[#1a1a1a] px-3 py-1 rounded-md border border-white/5 text-[10px] font-mono text-emerald-400 flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> {m.commence_time.split('T')[1].slice(0,5)}
-                </div>
-              </div>
-
-              {/* TEAMS VS */}
-              <div className="flex justify-between items-center mb-8 relative z-10">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-lg font-bold text-gray-500">
-                        {m.home_team.charAt(0)}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+                
+                {/* EQUIPOS Y LOGOS */}
+                <div className="flex-1 w-full flex items-center justify-between">
+                    <div className="flex flex-col items-center gap-2 w-24">
+                        <TeamLogo url={m.home_logo} name={m.home_team} />
+                        <span className="text-xs font-bold text-white text-center leading-tight">{m.home_team}</span>
                     </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-white leading-none">{m.home_team}</h3>
-                        <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">HOME</p>
+
+                    <div className="flex flex-col items-center px-4">
+                        <span className="text-[10px] font-bold text-slate-600 mb-1">VS</span>
+                        <span className="text-[10px] font-mono text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded">{m.commence_time.split('T')[1].slice(0,5)}</span>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-2 w-24">
+                        <TeamLogo url={m.away_logo} name={m.away_team} />
+                        <span className="text-xs font-bold text-white text-center leading-tight">{m.away_team}</span>
                     </div>
                 </div>
 
-                <div className="text-2xl font-black text-[#222] italic select-none">VS</div>
-
-                <div className="flex items-center gap-4 flex-row-reverse text-right">
-                    <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-lg font-bold text-gray-500">
-                        {m.away_team.charAt(0)}
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold text-white leading-none">{m.away_team}</h3>
-                        <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">AWAY</p>
-                    </div>
-                </div>
-              </div>
-
-              {/* BOTÓN ACCIÓN */}
-              <div className="relative z-10">
-                {!generatedPrompts[m.id] ? (
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-gray-500">O/U 2.5</span>
-                            <span className="text-emerald-400 font-mono text-sm font-bold">--</span>
-                        </div>
-                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="bg-[#151515] hover:bg-[#222] rounded-lg border border-white/5 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors">
-                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={14}/> : <Zap size={14} className="text-emerald-500"/>}
-                            {analyzingId === m.id ? "ANALIZANDO..." : "CALCULAR IA"}
+                {/* ACCIÓN */}
+                <div className="w-full md:w-auto flex flex-col gap-2">
+                    {!generatedPrompts[m.id] ? (
+                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="w-full md:w-32 py-2.5 bg-[#151515] hover:bg-[#222] border border-white/10 rounded-lg text-[10px] font-bold text-white flex items-center justify-center gap-2 transition-all group-hover:border-emerald-500/30 group-hover:text-emerald-400">
+                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={12}/> : <Zap size={12}/>}
+                            ANALIZAR
                         </button>
-                    </div>
-                ) : (
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center group-hover:border-emerald-500/20 transition-colors">
-                                <span className="text-[10px] font-bold text-gray-500">ESTRATEGIA</span>
-                                <span className="text-emerald-400 font-mono text-xs font-bold flex items-center gap-1"><Check size={10}/> LISTA</span>
-                            </div>
-                            <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-gray-500">MODELO</span>
-                                <span className="text-indigo-400 font-mono text-xs font-bold">RANDOM FOREST</span>
-                            </div>
-                        </div>
-                        
-                        <div className="flex gap-2">
-                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-white text-black hover:bg-gray-200'}`}>
-                                {copiedId === m.id ? <Check size={14}/> : <Copy size={14}/>}
-                                {copiedId === m.id ? "COPIADO" : "COPIAR PROMPT"}
+                    ) : (
+                        <div className="flex gap-2 animate-in fade-in">
+                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/30'}`}>
+                                {copiedId === m.id ? <Check size={12}/> : <Copy size={12}/>} {copiedId === m.id ? "LISTO" : "COPIAR"}
                             </button>
-                            <a href="https://chat.openai.com" target="_blank" className="w-12 flex items-center justify-center bg-[#1a1a1a] border border-white/10 rounded-lg hover:border-white/30 transition-colors text-gray-400 hover:text-white" title="GPT">
-                                <MousePointerClick size={16}/>
+                            <a href="https://chat.openai.com" target="_blank" className="w-10 flex items-center justify-center bg-[#151515] border border-white/10 rounded-lg hover:border-white/30 text-slate-400 hover:text-white transition-colors">
+                                <MousePointerClick size={14}/>
                             </a>
                         </div>
-                    </div>
-                )}
-              </div>
+                    )}
+                </div>
 
+              </div>
             </div>
           ))}
         </div>
