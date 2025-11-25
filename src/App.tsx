@@ -1,4 +1,3 @@
-cat << 'EOF' > src/App.tsx
 import React, { useState } from 'react';
 import { 
   Activity, RefreshCw, Zap, Search, Copy, Check, 
@@ -6,6 +5,7 @@ import {
   ChevronRight, DollarSign, Shield, MousePointerClick
 } from 'lucide-react';
 
+// === CONFIGURACIÓN ===
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
@@ -89,7 +89,7 @@ function App() {
 
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
-    setStatus("Buscando Cuotas...");
+    setStatus("Analizando...");
     try {
       const apiKey = getRandomKey();
       if (!apiKey) throw new Error("Faltan Keys");
@@ -110,7 +110,7 @@ function App() {
       const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
       
       if (valid.length === 0) {
-        setStatus("No hay partidos.");
+        setStatus("Sin partidos.");
         return;
       }
 
@@ -121,7 +121,7 @@ function App() {
       });
       
       setMatches(valid);
-      setStatus(`Encontrados: ${valid.length}`);
+      setStatus(`Resultados: ${valid.length}`);
 
     } catch (e) {
       setStatus(`Error: ${e.message}`);
@@ -191,54 +191,161 @@ VEREDICTO: Compara modelo vs mercado. Busca noticias. Dame la mejor apuesta y mo
   };
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-gray-300 font-sans pb-32 p-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex justify-between items-end mb-6 border-b border-white/10 pb-4">
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Activity className="text-emerald-500" /> BetSmart <span className="text-emerald-500">Ultra</span>
-          </h1>
+    <div className="min-h-screen bg-[#050505] text-gray-300 font-sans pb-32 relative">
+      
+      {/* BACKGROUND GRID (REJILLA ESTILO IMAGEN) */}
+      <div className="fixed inset-0 pointer-events-none" 
+           style={{
+             backgroundImage: 'linear-gradient(to right, #1a1a1a 1px, transparent 1px), linear-gradient(to bottom, #1a1a1a 1px, transparent 1px)',
+             backgroundSize: '40px 40px',
+             opacity: 0.3
+           }}>
+      </div>
+      <div className="fixed inset-0 bg-gradient-to-b from-transparent to-[#050505] pointer-events-none"></div>
+
+      <div className="relative z-10 max-w-4xl mx-auto p-6">
+        
+        {/* HEADER ESTILO TARJETA FLOTANTE */}
+        <div className="flex justify-between items-center mb-8 bg-[#111] border border-white/5 p-4 rounded-2xl shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-500 w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <Activity className="text-black" size={24} strokeWidth={2.5}/>
+            </div>
+            <div>
+                <h1 className="text-xl font-extrabold text-white tracking-tight leading-none">BetSmart<span className="text-emerald-500">AI</span></h1>
+                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Professional Prediction</p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2 bg-[#1a1a1a] px-3 py-1.5 rounded-full border border-white/5">
+             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+             <span className="text-[10px] font-bold text-gray-400">Modelos ML Activos</span>
+          </div>
         </div>
 
-        <div className="bg-[#121212] rounded-xl border border-white/10 p-5 mb-8 shadow-2xl">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold">Bankroll</label>
-                <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white"/>
+        {/* TITULO SECCION */}
+        <div className="mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-bold uppercase tracking-wider mb-2">
+                <Zap size={12}/> Próximos Eventos - IA Analysis
+            </div>
+            <h2 className="text-4xl font-bold text-white mb-2">Calendario Inteligente</h2>
+            <p className="text-sm text-gray-500 max-w-xl">
+                Sistema híbrido que combina algoritmos <strong className="text-white">Random Forest</strong> con análisis semántico de noticias en tiempo real para maximizar la precisión en mercados O/U 2.5 y BTTS.
+            </p>
+        </div>
+
+        {/* PANEL DE CONTROL */}
+        <div className="bg-[#111] rounded-2xl border border-white/10 p-6 mb-10 shadow-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Bankroll</label>
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-emerald-500/50 transition-colors">
+                    <Wallet size={16} className="text-emerald-500"/>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="bg-transparent w-full text-white font-mono text-sm outline-none placeholder-gray-700"/>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold">Fecha</label>
-                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white"/>
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Fecha</label>
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 focus-within:border-indigo-500/50 transition-colors">
+                    <Calendar size={16} className="text-indigo-500"/>
+                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-transparent w-full text-white font-sans text-sm outline-none"/>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase font-bold">Liga</label>
-                <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white">
-                    {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
-                </select>
+              <div>
+                <label className="text-[10px] text-gray-500 font-bold uppercase mb-2 block">Mercado</label>
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 relative focus-within:border-purple-500/50 transition-colors">
+                    <Globe size={16} className="text-purple-500"/>
+                    <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="bg-transparent w-full text-white text-sm outline-none appearance-none cursor-pointer">
+                        {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                    </select>
+                    <ChevronRight size={14} className="absolute right-4 text-gray-600 rotate-90 pointer-events-none"/>
+                </div>
               </div>
             </div>
-            <button onClick={escanear} className="w-full bg-emerald-600 text-white py-3 rounded font-bold flex justify-center gap-2">
-              {status.includes("...") ? <RefreshCw className="animate-spin"/> : <Search/>} {status}
+            <button onClick={escanear} className="w-full bg-white hover:bg-gray-200 text-black py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-[0.99]">
+              {status.includes("...") ? <RefreshCw className="animate-spin" size={18}/> : <Search size={18}/>}
+              {status.toUpperCase()}
             </button>
         </div>
 
-        <div className="grid gap-4">
+        {/* CARDS ESTILO IMAGEN */}
+        <div className="grid gap-6">
           {matches.map(m => (
-            <div key={m.id} className="bg-[#121212] rounded-xl border border-white/10 p-5">
-              <div className="flex justify-between mb-4 font-bold text-white text-sm">
-                <span>{m.home_team}</span> <span className="text-gray-500">VS</span> <span>{m.away_team}</span>
-              </div>
-              {!generatedPrompts[m.id] ? (
-                <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="w-full bg-[#1a1a1a] border border-white/10 text-emerald-400 py-2 rounded font-bold text-xs flex justify-center gap-2">
-                  {analyzingId === m.id ? <RefreshCw className="animate-spin"/> : <Zap/>} ANALIZAR
-                </button>
-              ) : (
-                <div className="flex gap-2">
-                  <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className="flex-1 bg-emerald-500 text-black py-2 rounded font-bold text-xs flex justify-center gap-2">
-                    {copiedId === m.id ? <Check/> : <Copy/>} COPIAR
-                  </button>
-                  <a href="https://chat.openai.com" target="_blank" className="bg-[#1a1a1a] border border-white/10 px-4 rounded flex items-center text-white">GPT</a>
+            <div key={m.id} className="group bg-[#111] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all duration-300 shadow-lg relative overflow-hidden">
+              
+              {/* HEADER CARD */}
+              <div className="flex justify-between items-center mb-8 relative z-10">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    <Trophy size={12} className="text-indigo-500"/> {LEAGUES.find(l => l.code === selectedLeague)?.name}
                 </div>
-              )}
+                <div className="bg-[#1a1a1a] px-3 py-1 rounded-md border border-white/5 text-[10px] font-mono text-emerald-400 flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> {m.commence_time.split('T')[1].slice(0,5)}
+                </div>
+              </div>
+
+              {/* TEAMS VS */}
+              <div className="flex justify-between items-center mb-8 relative z-10">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-lg font-bold text-gray-500">
+                        {m.home_team.charAt(0)}
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white leading-none">{m.home_team}</h3>
+                        <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">HOME</p>
+                    </div>
+                </div>
+
+                <div className="text-2xl font-black text-[#222] italic select-none">VS</div>
+
+                <div className="flex items-center gap-4 flex-row-reverse text-right">
+                    <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-white/5 flex items-center justify-center text-lg font-bold text-gray-500">
+                        {m.away_team.charAt(0)}
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-white leading-none">{m.away_team}</h3>
+                        <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">AWAY</p>
+                    </div>
+                </div>
+              </div>
+
+              {/* BOTÓN ACCIÓN */}
+              <div className="relative z-10">
+                {!generatedPrompts[m.id] ? (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-gray-500">O/U 2.5</span>
+                            <span className="text-emerald-400 font-mono text-sm font-bold">--</span>
+                        </div>
+                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="bg-[#151515] hover:bg-[#222] rounded-lg border border-white/5 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors">
+                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={14}/> : <Zap size={14} className="text-emerald-500"/>}
+                            {analyzingId === m.id ? "ANALIZANDO..." : "CALCULAR IA"}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center group-hover:border-emerald-500/20 transition-colors">
+                                <span className="text-[10px] font-bold text-gray-500">ESTRATEGIA</span>
+                                <span className="text-emerald-400 font-mono text-xs font-bold flex items-center gap-1"><Check size={10}/> LISTA</span>
+                            </div>
+                            <div className="bg-[#151515] rounded-lg border border-white/5 p-3 flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-gray-500">MODELO</span>
+                                <span className="text-indigo-400 font-mono text-xs font-bold">RANDOM FOREST</span>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 py-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-white text-black hover:bg-gray-200'}`}>
+                                {copiedId === m.id ? <Check size={14}/> : <Copy size={14}/>}
+                                {copiedId === m.id ? "COPIADO" : "COPIAR PROMPT"}
+                            </button>
+                            <a href="https://chat.openai.com" target="_blank" className="w-12 flex items-center justify-center bg-[#1a1a1a] border border-white/10 rounded-lg hover:border-white/30 transition-colors text-gray-400 hover:text-white" title="GPT">
+                                <MousePointerClick size={16}/>
+                            </a>
+                        </div>
+                    </div>
+                )}
+              </div>
+
             </div>
           ))}
         </div>
@@ -248,4 +355,3 @@ VEREDICTO: Compara modelo vs mercado. Busca noticias. Dame la mejor apuesta y mo
 }
 
 export default App;
-EOF
