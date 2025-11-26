@@ -209,7 +209,7 @@ function App() {
 
 🔹 **CONFIGURACIÓN DE CAPITAL:**
 - **Bankroll Total:** $${bankroll} COP
-- **Unidad de Stake (1%):** $${(parseInt(bankroll)/100).toFixed(0)} COP
+- **Unidad de Stake (1%):** $${(parseInt(bankroll)/80).toFixed(0)} COP
 
 ⚽ **EVENTO:** ${match.home_team} vs ${match.away_team}
 🏆 **LIGA:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
