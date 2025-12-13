@@ -1,14 +1,15 @@
-cat << 'EOF' > src/App.tsx
 import React, { useState } from 'react';
 import { 
   Activity, RefreshCw, Zap, Search, Copy, Check, 
   Calendar, Globe, Wallet, BarChart2, 
   ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
-  History, Swords
+  Flame, History, Swords, TrendingUp, Terminal, Cpu, Bot, FileText, Globe2
 } from 'lucide-react';
 
+// === CONFIGURACIÓN DEL SISTEMA ===
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
-// 🔑 TUS LLAVES
+
+// 🔑 PEGA TUS 50 LLAVES DE ODDS API AQUÍ (Dentro de las comillas)
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -73,11 +74,26 @@ const LEAGUES = [
   { code: 'soccer_portugal_primeira_liga', name: 'Primeira Liga', flag: '🇵🇹' }
 ];
 
+// --- UTILIDADES ---
 const getRandomKey = () => {
-    if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0) return null;
+    if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0 || ODDS_API_KEYS[0].includes("TU_CLAVE")) return null;
     return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 };
 
+const TeamLogo = ({ url, name }) => {
+    if (url) {
+        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
+    }
+    return (
+        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
+            {name ? name.substring(0, 2).toUpperCase() : "??"}
+        </div>
+    );
+};
+
+// ==========================================
+// 🚀 APLICACIÓN PRINCIPAL
+// ==========================================
 function App() {
   const [matches, setMatches] = useState([]);
   const [status, setStatus] = useState("SISTEMA ONLINE");
@@ -89,26 +105,31 @@ function App() {
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
 
+  // --- 1. ESCANEAR MERCADO ---
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
     setStatus("BUSCANDO EVENTOS...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey) throw new Error("Faltan Keys");
+      if (!apiKey) throw new Error("Faltan las API Keys en el código");
 
+      // Intento 1: Full Data (Con BTTS)
       let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`;
       let res = await fetch(url);
       let rawData = await res.json();
 
+      // Fallback: Si falla, intentar sin BTTS (Modo Seguro)
       if (!res.ok || rawData.message || !Array.isArray(rawData)) {
+        console.warn("Reintentando modo seguro (sin BTTS)...");
         url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals&oddsFormat=decimal`;
         res = await fetch(url);
         rawData = await res.json();
       }
 
       if (rawData.message) throw new Error(rawData.message);
-      if (!Array.isArray(rawData)) throw new Error("Error API Odds");
+      if (!Array.isArray(rawData)) throw new Error("Error de conexión con API Odds");
 
+      // Filtro de fecha
       const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
       
       if (valid.length === 0) {
@@ -117,6 +138,7 @@ function App() {
       }
 
       setStatus(`PROCESANDO IMÁGENES...`);
+      // Sincronizar con Python (Cache + Logos)
       const resPython = await fetch(`${PYTHON_BACKEND_URL}/sincronizar-cache`, {
         method: 'POST', 
         headers: {'Content-Type': 'application/json'},
@@ -124,6 +146,7 @@ function App() {
       });
       const dataPython = await resPython.json();
       
+      // Unir datos con logos
       const matchesWithLogos = valid.map(m => ({
         ...m,
         home_logo: dataPython.logos?.[m.home_team] || null,
@@ -138,9 +161,11 @@ function App() {
     }
   };
 
+  // --- 2. GENERAR PROMPT MAESTRO ---
   const generarPrompt = async (match) => {
     setAnalyzingId(match.id);
     try {
+      // Extracción de Cuotas (Manejo de errores si no existen)
       let oddHome = 0, oddDraw = 0, oddAway = 0;
       let over25 = "ND", under25 = "ND", bttsYes = "ND", bttsNo = "ND";
 
@@ -163,6 +188,7 @@ function App() {
         }
       }
 
+      // Llamada al Backend Matemático
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_completo`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -176,8 +202,8 @@ function App() {
       });
       const data = await res.json();
       
-      // === PROMPT MAESTRO v15 (CON H2H IA) ===
-      const prompt = `## 🕵️‍♂️ ROL: ANALISTA DEPORTIVO (BetSmart AI)
+      // === PROMPT PARA LA IA ===
+      const prompt = `## 🕵️‍♂️ ROL: GESTOR DE INVERSIONES (BetSmart AI)
 
 ### 1. 🏦 GESTIÓN DE CAPITAL
 - **Bankroll:** $${bankroll} COP
@@ -187,47 +213,47 @@ function App() {
 - **Partido:** ${match.home_team} vs ${match.away_team}
 - **Liga:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
 
-### 3. 📊 MERCADO (ODDS)
+### 3. 📊 MERCADO (SI FALTA UN DATO, BÚSCALO)
 - **1X2:** 1[@${oddHome}] | X[@${oddDraw}] | 2[@${oddAway}]
-- **Goles:** Over[@${over25}] | Under[@${under25}]
+- **Goles (2.5):** Over[@${over25}] | Under[@${under25}]
 - **BTTS:** Sí[@${bttsYes}] | No[@${bttsNo}]
 
 ### 4. 🩻 RADIOGRAFÍA TÉCNICA (Backend)
 **🏠 LOCAL (${match.home_team}):**
-- **🔥 MOMENTUM:** [ ${data.stats.home.form} ] (Últimos 5)
+- **🔥 MOMENTUM (Forma 5p):** [ ${data.stats.home.form || '?-?-?-?-?'} ] (W=Ganó, L=Perdió)
 - **Calidad (xG):** Ataque ${data.stats.home.xg_for} | Defensa ${data.stats.home.xg_against}
 - **Volumen:** ${data.stats.home.shots} tiros/p.
 
 **✈️ VISITA (${match.away_team}):**
-- **🔥 MOMENTUM:** [ ${data.stats.away.form} ] (Últimos 5)
+- **🔥 MOMENTUM (Forma 5p):** [ ${data.stats.away.form || '?-?-?-?-?'} ] (W=Ganó, L=Perdió)
 - **Calidad (xG):** Ataque ${data.stats.away.xg_for} | Defensa ${data.stats.away.xg_against}
 - **Volumen:** ${data.stats.away.shots} tiros/p.
 
-### 5. 🧠 CEREBRO MATEMÁTICO (.joblib)
-- **ELO:** ${data.elo.home} vs ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
-- **PROBABILIDAD IA:** BTTS: ${data.model_result.btts_prob}% | Over 2.5: ${data.model_result.over_prob}%
+### 5. 🧠 CEREBRO MATEMÁTICO
+- **ELO:** Local ${data.elo.home} vs Visita ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
+- **PREDICCIÓN IA:**
+  - BTTS (Sí): ${data.model_result.btts_prob}%
+  - Over 2.5: ${data.model_result.over_prob}%
 
----
+### 📝 INSTRUCCIONES CRÍTICAS PARA EL ASISTENTE:
 
-### 🎯 TUS INSTRUCCIONES DE EJECUCIÓN (Browsing Mode):
+1.  🚨 **PROTOCOLO DE BÚSQUEDA OBLIGATORIA:**
+    - Si ves "@ND" en cuotas, **BÚSCALAS EN INTERNET**.
+    - **HISTORIAL H2H:** Busca los últimos 5 enfrentamientos directos entre ellos.
 
-1.  🚨 **INVESTIGACIÓN H2H (HISTORIAL):**
-    Busca en internet los últimos 5 enfrentamientos directos entre ${match.home_team} y ${match.away_team}. ¿Hay una "Paternidad" clara o tendencia de goles (Over/BTTS) entre ellos?
+2.  **CÁLCULO DE VALOR (EV+):**
+    Cruza mis predicciones con las cuotas reales.
 
-2.  **INVESTIGACIÓN DE NOTICIAS:**
-    Busca lesiones de titulares confirmadas HOY.
-
-3.  **CÁLCULO DE VALOR FINAL:**
-    Si faltan cuotas en la sección 3 ("ND"), búscalas.
-    Cruza: **(Matemática + Forma Reciente + H2H Histórico + Noticias)**.
+3.  **ANÁLISIS HÍBRIDO:**
+    Si el Modelo Matemático discrepa con la Forma Reciente (Momentum), **prioriza el Momentum y el xG**.
 
 4.  **VEREDICTO:**
-    Dame la APUESTA, el STAKE y el MONTO ($).`;
+    Dame la apuesta, el STAKE y el MONTO.`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
     } catch (e) {
-      alert("Error");
+      alert("Error al generar análisis");
     } finally {
       setAnalyzingId(null);
     }
@@ -239,31 +265,22 @@ function App() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const TeamLogo = ({ url, name }) => {
-    if (url) {
-        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
-    }
-    return (
-        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
-            {name.substring(0, 2).toUpperCase()}
-        </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-[#050505] text-gray-200 font-sans pb-32">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         
+        {/* HEADER */}
         <div className="flex justify-between items-end mb-10 border-b border-white/10 pb-6">
           <div>
             <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                 <Activity className="text-emerald-500" size={28}/>
-                BetSmart <span className="text-emerald-500">VISUAL</span>
+                BetSmart <span className="text-emerald-500">TITANIUM</span>
             </h1>
             <p className="text-xs text-slate-500 font-bold tracking-widest uppercase pl-1 mt-1">Next Gen Sports Terminal</p>
           </div>
         </div>
 
+        {/* DASHBOARD */}
         <div className="bg-[#0a0a0a] rounded-xl border border-white/10 p-5 mb-8 shadow-lg">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="space-y-1">
@@ -290,6 +307,7 @@ function App() {
             </button>
         </div>
 
+        {/* CARDS CON LOGOS */}
         <div className="grid gap-5">
           {matches.map(m => (
             <div key={m.id} className="group bg-[#0a0a0a] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all shadow-lg relative overflow-hidden">
@@ -320,7 +338,7 @@ function App() {
                                 {copiedId === m.id ? <Check size={12}/> : <Copy size={12}/>} {copiedId === m.id ? "LISTO" : "COPIAR"}
                             </button>
                             <a href="https://chat.openai.com" target="_blank" className="w-10 flex items-center justify-center bg-[#151515] border border-white/10 rounded-lg hover:border-white/30 text-slate-400 hover:text-white transition-colors">
-                                <MousePointerClick size={14}/>
+                                <Bot size={14}/>
                             </a>
                         </div>
                     )}
@@ -335,4 +353,3 @@ function App() {
 }
 
 export default App;
-EOF
