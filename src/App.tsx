@@ -2,17 +2,13 @@ cat << 'EOF' > src/App.tsx
 import React, { useState } from 'react';
 import { 
   Activity, RefreshCw, Zap, Search, Copy, Check, 
-  Calendar, Globe, Wallet, TrendingUp, BarChart3, 
-  ChevronRight, DollarSign, Shield, MousePointerClick,
-  AlertTriangle, Terminal, Cpu, Bot, FileText, Globe2
+  Calendar, Globe, Wallet, BarChart2, 
+  ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
+  History, Swords
 } from 'lucide-react';
 
-// ==========================================
-// ⚙️ CONFIGURACIÓN DEL SISTEMA
-// ==========================================
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
-
-// 🔑 TUS LLAVES DE ODDS API
+// 🔑 TUS LLAVES
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -77,26 +73,11 @@ const LEAGUES = [
   { code: 'soccer_portugal_primeira_liga', name: 'Primeira Liga', flag: '🇵🇹' }
 ];
 
-// --- UTILIDADES INTERNAS ---
 const getRandomKey = () => {
     if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0) return null;
     return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 };
 
-const TeamLogo = ({ url, name }) => {
-    if (url) {
-        return <img src={url} alt={name} className="w-12 h-12 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" onError={(e) => e.currentTarget.style.display = 'none'} />;
-    }
-    return (
-        <div className="w-12 h-12 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
-            {name ? name.substring(0, 2).toUpperCase() : "??"}
-        </div>
-    );
-};
-
-// ==========================================
-// 🚀 COMPONENTE PRINCIPAL
-// ==========================================
 function App() {
   const [matches, setMatches] = useState([]);
   const [status, setStatus] = useState("SISTEMA ONLINE");
@@ -108,40 +89,34 @@ function App() {
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
 
-  // --- FUNCIÓN 1: ESCANEAR MERCADO ---
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
-    setStatus("INICIANDO PROTOCOLO DE ESCANEO...");
+    setStatus("BUSCANDO EVENTOS...");
     try {
       const apiKey = getRandomKey();
       if (!apiKey) throw new Error("Faltan Keys");
 
-      // 1. Obtener Cuotas
       let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`;
       let res = await fetch(url);
       let rawData = await res.json();
 
-      // Fallback si falla
       if (!res.ok || rawData.message || !Array.isArray(rawData)) {
-        console.warn("Fallback activado...");
         url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals&oddsFormat=decimal`;
         res = await fetch(url);
         rawData = await res.json();
       }
 
       if (rawData.message) throw new Error(rawData.message);
-      if (!Array.isArray(rawData)) throw new Error("Error de conexión con proveedor");
+      if (!Array.isArray(rawData)) throw new Error("Error API Odds");
 
-      // Filtro de Fecha
       const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
       
       if (valid.length === 0) {
-        setStatus("MERCADO CERRADO / SIN EVENTOS.");
+        setStatus("MERCADO CERRADO HOY.");
         return;
       }
 
-      // 2. Sincronizar con Python y obtener Logos
-      setStatus(`PROCESANDO IMÁGENES DE ${valid.length} EVENTOS...`);
+      setStatus(`PROCESANDO IMÁGENES...`);
       const resPython = await fetch(`${PYTHON_BACKEND_URL}/sincronizar-cache`, {
         method: 'POST', 
         headers: {'Content-Type': 'application/json'},
@@ -156,18 +131,16 @@ function App() {
       }));
       
       setMatches(matchesWithLogos);
-      setStatus(`✅ DATOS LISTOS: ${valid.length} EVENTOS`);
+      setStatus(`✅ LISTO: ${valid.length} EVENTOS`);
 
     } catch (e) {
       setStatus(`❌ ERROR: ${e.message}`);
     }
   };
 
-  // --- FUNCIÓN 2: GENERAR PROMPT MAESTRO ---
   const generarPrompt = async (match) => {
     setAnalyzingId(match.id);
     try {
-      // Extracción de Cuotas
       let oddHome = 0, oddDraw = 0, oddAway = 0;
       let over25 = "ND", under25 = "ND", bttsYes = "ND", bttsNo = "ND";
 
@@ -190,7 +163,6 @@ function App() {
         }
       }
 
-      // Llamada al Backend Matemático
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_completo`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -204,56 +176,58 @@ function App() {
       });
       const data = await res.json();
       
-      // === EL PROMPT PARA KIMI / GPT (AQUÍ ESTÁ EL CAMBIO) ===
-      const prompt = `📋 **ANÁLISIS TÉCNICO DE INVERSIÓN - BETSMART AI**
+      // === PROMPT MAESTRO v15 (CON H2H IA) ===
+      const prompt = `## 🕵️‍♂️ ROL: ANALISTA DEPORTIVO (BetSmart AI)
 
-🔹 **CONFIGURACIÓN DE CAPITAL:**
-- **Bankroll Total:** $${bankroll} COP
-- **Unidad de Stake (2%):** $${(parseInt(bankroll)* 0.02).toFixed(0)} COP
+### 1. 🏦 GESTIÓN DE CAPITAL
+- **Bankroll:** $${bankroll} COP
+- **Stake 1/10:** $${(parseInt(bankroll)/70).toFixed(0)} COP
 
-⚽ **EVENTO:** ${match.home_team} vs ${match.away_team}
-🏆 **LIGA:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
-📅 **FECHA:** ${selectedDate}
+### 2. 📋 EVENTO
+- **Partido:** ${match.home_team} vs ${match.away_team}
+- **Liga:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
 
-📊 **LECTURA DE MERCADO (ODDS):**
-- **Ganador:** 1[@${oddHome}] | X[@${oddDraw}] | 2[@${oddAway}]
-- **Goles (2.5):** Over[@${over25}] | Under[@${under25}]
-- **Ambos Marcan:** Sí[@${bttsYes}] | No[@${bttsNo}]
+### 3. 📊 MERCADO (ODDS)
+- **1X2:** 1[@${oddHome}] | X[@${oddDraw}] | 2[@${oddAway}]
+- **Goles:** Over[@${over25}] | Under[@${under25}]
+- **BTTS:** Sí[@${bttsYes}] | No[@${bttsNo}]
 
-🧮 **INTELIGENCIA MATEMÁTICA (BACKEND):**
-1. **Potencia ELO:**
-   - Local: ${data.elo.home} | Visita: ${data.elo.away}
-   - Diferencia Neta: ${data.elo.home - data.elo.away}
-   *(Nota: >100 pts indica ventaja clara).*
+### 4. 🩻 RADIOGRAFÍA TÉCNICA (Backend)
+**🏠 LOCAL (${match.home_team}):**
+- **🔥 MOMENTUM:** [ ${data.stats.home.form} ] (Últimos 5)
+- **Calidad (xG):** Ataque ${data.stats.home.xg_for} | Defensa ${data.stats.home.xg_against}
+- **Volumen:** ${data.stats.home.shots} tiros/p.
 
-2. **Estadísticas Reales (Media 5 Partidos):**
-   - Ataque Local: ${data.stats.home.shots} tiros/p.
-   - Ataque Visita: ${data.stats.away.shots} tiros/p.
-   - Córners Promedio: L(${data.stats.home.corners}) - V(${data.stats.away.corners}).
+**✈️ VISITA (${match.away_team}):**
+- **🔥 MOMENTUM:** [ ${data.stats.away.form} ] (Últimos 5)
+- **Calidad (xG):** Ataque ${data.stats.away.xg_for} | Defensa ${data.stats.away.xg_against}
+- **Volumen:** ${data.stats.away.shots} tiros/p.
 
-3. **Predicción Algorítmica (.joblib):**
-   - **Probabilidad BTTS (Sí):** ${data.model_result.btts_prob}%
-   - **Probabilidad Over 2.5:** ${data.model_result.over_prob}%
+### 5. 🧠 CEREBRO MATEMÁTICO (.joblib)
+- **ELO:** ${data.elo.home} vs ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
+- **PROBABILIDAD IA:** BTTS: ${data.model_result.btts_prob}% | Over 2.5: ${data.model_result.over_prob}%
 
-📝 **INSTRUCCIONES CRÍTICAS PARA EL ASISTENTE:**
-Actúa como un experto financiero deportivo.
+---
 
-1.  🚨 **PROTOCOLO DE BÚSQUEDA OBLIGATORIA:**
-    Si alguna cuota en la sección "MERCADO" aparece como **"ND"** (No Disponible), **TU PRIMERA TAREA ES BUSCAR EN GOOGLE** las cuotas actuales para ese mercado específico (Ej: "Cuota BTTS ${match.home_team} vs ${match.away_team}"). ¡No realices el análisis sin tener la cuota real!
+### 🎯 TUS INSTRUCCIONES DE EJECUCIÓN (Browsing Mode):
 
-2.  **ANÁLISIS DE NOTICIAS:**
-    Busca lesiones de titulares confirmadas en las últimas 24h.
+1.  🚨 **INVESTIGACIÓN H2H (HISTORIAL):**
+    Busca en internet los últimos 5 enfrentamientos directos entre ${match.home_team} y ${match.away_team}. ¿Hay una "Paternidad" clara o tendencia de goles (Over/BTTS) entre ellos?
 
-3.  **CÁLCULO DE VALOR:**
-    Cruza mi modelo matemático con la cuota (la que te di o la que buscaste).
+2.  **INVESTIGACIÓN DE NOTICIAS:**
+    Busca lesiones de titulares confirmadas HOY.
 
-4.  **ORDEN DE COMPRA:**
-    Dame el STAKE (1-10), el MONTO en pesos y la selección final.`;
+3.  **CÁLCULO DE VALOR FINAL:**
+    Si faltan cuotas en la sección 3 ("ND"), búscalas.
+    Cruza: **(Matemática + Forma Reciente + H2H Histórico + Noticias)**.
+
+4.  **VEREDICTO:**
+    Dame la APUESTA, el STAKE y el MONTO ($).`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
     } catch (e) {
-      alert("Error de cálculo en servidor");
+      alert("Error");
     } finally {
       setAnalyzingId(null);
     }
@@ -265,127 +239,92 @@ Actúa como un experto financiero deportivo.
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  return (
-    <div className="min-h-screen bg-[#09090b] text-gray-200 font-sans pb-32 selection:bg-indigo-500/30">
-      
-      {/* Background Effects */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-900/10 rounded-full blur-[120px]"></div>
-      </div>
+  const TeamLogo = ({ url, name }) => {
+    if (url) {
+        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
+    }
+    return (
+        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
+            {name.substring(0, 2).toUpperCase()}
+        </div>
+    );
+  };
 
-      <div className="relative z-10 max-w-4xl mx-auto p-4 md:p-8">
+  return (
+    <div className="min-h-screen bg-[#050505] text-gray-200 font-sans pb-32">
+      <div className="max-w-4xl mx-auto p-4 md:p-8">
         
-        {/* Header */}
         <div className="flex justify-between items-end mb-10 border-b border-white/10 pb-6">
           <div>
-            <div className="flex items-center gap-3 mb-1">
-                <div className="bg-white/5 p-2 rounded-lg border border-white/10">
-                    <Activity className="text-indigo-400" size={24}/>
-                </div>
-                <h1 className="text-3xl font-bold text-white tracking-tight">
-                BetSmart <span className="text-indigo-500">TITANIUM</span>
-                </h1>
-            </div>
-            <p className="text-[10px] text-slate-500 font-bold tracking-[0.3em] uppercase pl-1">AI Powered Analytics</p>
-          </div>
-          <div className="hidden md:block">
-             <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-300 text-[10px] font-mono border border-indigo-500/20 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse"></div> v13.0 SMART-SEARCH
-             </span>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Activity className="text-emerald-500" size={28}/>
+                BetSmart <span className="text-emerald-500">VISUAL</span>
+            </h1>
+            <p className="text-xs text-slate-500 font-bold tracking-widest uppercase pl-1 mt-1">Next Gen Sports Terminal</p>
           </div>
         </div>
 
-        {/* Dashboard Control */}
-        <div className="bg-[#121212] rounded-2xl border border-white/10 p-6 mb-10 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-5 text-white"><Terminal size={100}/></div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6 relative z-10">
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><DollarSign size={10}/> Capital</label>
-                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-indigo-500/50 transition-colors font-mono"/>
+        <div className="bg-[#0a0a0a] rounded-xl border border-white/10 p-5 mb-8 shadow-lg">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Capital</label>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500/50 transition-colors"/>
                 </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Calendar size={10}/> Fecha</label>
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-indigo-500/50 transition-colors"/>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Fecha</label>
+                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-indigo-500/50 transition-colors"/>
                 </div>
-                <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Globe size={10}/> Mercado</label>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Mercado</label>
                     <div className="relative">
-                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none appearance-none cursor-pointer">
-                            {LEAGUES.map(l => <option key={l.code} value={l.code} className="bg-[#121212]">{l.flag} {l.name}</option>)}
+                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none appearance-none cursor-pointer">
+                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
                         </select>
-                        <ChevronRight size={14} className="absolute right-4 top-4 text-slate-600 pointer-events-none"/>
+                        <ChevronRight size={12} className="absolute right-3 top-3 text-slate-600 rotate-90 pointer-events-none"/>
                     </div>
                 </div>
             </div>
-
-            <button onClick={escanear} className="relative z-10 w-full bg-white hover:bg-gray-200 text-black py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(255,255,255,0.1)] transition-all active:scale-[0.99]">
+            <button onClick={escanear} className="w-full bg-white hover:bg-gray-200 text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all">
                 {status.includes("...") ? <RefreshCw className="animate-spin" size={18}/> : <Search size={18}/>}
                 {status}
             </button>
         </div>
 
-        {/* Grid de Partidos */}
-        <div className="grid gap-6">
+        <div className="grid gap-5">
           {matches.map(m => (
-            <div key={m.id} className="group bg-[#121212] rounded-2xl border border-white/5 overflow-hidden hover:border-indigo-500/30 transition-all duration-300 shadow-lg">
-              
-              {/* Header Tarjeta */}
-              <div className="px-6 py-4 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/[0.02] to-transparent">
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{LEAGUES.find(l => l.code === selectedLeague)?.name}</span>
-                </div>
-                <div className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20">
-                    {m.commence_time.split('T')[1].slice(0,5)}
-                </div>
-              </div>
-
-              {/* Cuerpo Tarjeta */}
-              <div className="p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                
-                {/* Equipos */}
+            <div key={m.id} className="group bg-[#0a0a0a] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all shadow-lg relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
                 <div className="flex-1 w-full flex items-center justify-between">
-                    <div className="flex flex-col items-center gap-3 w-24 text-center">
+                    <div className="flex flex-col items-center gap-2 w-24">
                         <TeamLogo url={m.home_logo} name={m.home_team} />
-                        <span className="text-xs font-bold text-white leading-tight">{m.home_team}</span>
+                        <span className="text-xs font-bold text-white text-center leading-tight">{m.home_team}</span>
                     </div>
-
-                    <div className="flex flex-col items-center px-2">
-                        <span className="text-2xl font-black text-[#222] italic">VS</span>
+                    <div className="flex flex-col items-center px-4">
+                        <span className="text-[10px] font-bold text-slate-600 mb-1">VS</span>
+                        <span className="text-[10px] font-mono text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded">{m.commence_time.split('T')[1].slice(0,5)}</span>
                     </div>
-
-                    <div className="flex flex-col items-center gap-3 w-24 text-center">
+                    <div className="flex flex-col items-center gap-2 w-24">
                         <TeamLogo url={m.away_logo} name={m.away_team} />
-                        <span className="text-xs font-bold text-white leading-tight">{m.away_team}</span>
+                        <span className="text-xs font-bold text-white text-center leading-tight">{m.away_team}</span>
                     </div>
                 </div>
-
-                {/* Botón Acción */}
-                <div className="w-full md:w-auto">
+                <div className="w-full md:w-auto flex flex-col gap-2">
                     {!generatedPrompts[m.id] ? (
-                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="w-full md:w-40 py-3 bg-[#181818] hover:bg-[#222] border border-white/10 rounded-xl text-[10px] font-bold text-white flex items-center justify-center gap-2 transition-all group-hover:border-indigo-500/40 group-hover:text-indigo-300">
-                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={14}/> : <Cpu size={14}/>}
-                            {analyzingId === m.id ? "COMPUTANDO..." : "EJECUTAR IA"}
+                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="w-full md:w-32 py-2.5 bg-[#151515] hover:bg-[#222] border border-white/10 rounded-lg text-[10px] font-bold text-white flex items-center justify-center gap-2 transition-all group-hover:border-emerald-500/30 group-hover:text-emerald-400">
+                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={12}/> : <Zap size={12}/>}
+                            ANALIZAR
                         </button>
                     ) : (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-right-4">
-                            <div className="bg-indigo-900/20 border border-indigo-500/20 rounded-lg p-2 text-center">
-                                <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider flex items-center justify-center gap-1">
-                                    <Globe2 size={10}/> Prompt + Search
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 px-4 py-2 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-white text-black hover:bg-gray-200'}`}>
-                                    {copiedId === m.id ? <Check size={12}/> : <Copy size={12}/>} {copiedId === m.id ? "LISTO" : "COPIAR"}
-                                </button>
-                                <a href="https://kimi.moonshot.cn/" target="_blank" className="w-10 flex items-center justify-center bg-[#181818] border border-white/10 rounded-lg hover:border-white/30 text-slate-400 hover:text-white transition-colors" title="Ir a Kimi">
-                                    <Bot size={16}/>
-                                </a>
-                            </div>
+                        <div className="flex gap-2 animate-in fade-in">
+                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/30'}`}>
+                                {copiedId === m.id ? <Check size={12}/> : <Copy size={12}/>} {copiedId === m.id ? "LISTO" : "COPIAR"}
+                            </button>
+                            <a href="https://chat.openai.com" target="_blank" className="w-10 flex items-center justify-center bg-[#151515] border border-white/10 rounded-lg hover:border-white/30 text-slate-400 hover:text-white transition-colors">
+                                <MousePointerClick size={14}/>
+                            </a>
                         </div>
                     )}
                 </div>
-
               </div>
             </div>
           ))}
