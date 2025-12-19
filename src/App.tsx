@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Zap, Copy, ExternalLink, RefreshCw, TrendingUp, DollarSign, AlertTriangle } from 'lucide-react';
+import { Shield, Zap, Copy, RefreshCw, TrendingUp, AlertTriangle, Check } from 'lucide-react';
 
-const DATA_URL = "https://raw.githubusercontent.com/japh99/capital-shield/main/data/opportunities.json";
-// OJO: Si estás usando el backend en vivo (Render) directamente, cambia la URL de abajo en la función escanear,
-// pero como estamos usando el script Python en GitHub Actions para generar el JSON, usamos esta.
-// Si estás usando la versión "En Vivo" (Render directo), el cambio es en la llamada fetch.
-// Asumo que estamos usando la versión "En Vivo" (Render) que te di antes.
-const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com";
+const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
 // 🔑 TUS LLAVES
 const ODDS_API_KEYS = [
@@ -103,24 +98,29 @@ function App() {
   };
 
   const copyPrompt = (op: any) => {
-    // Detectar si hay estimaciones
-    const isEstimated = op.details.est_h || op.details.est_a;
-    const warningText = isEstimated ? "⚠️ ATENCIÓN: El ELO es ESTIMADO (no oficial). Verifica la calidad de los equipos manualmente." : "✅ ELO OFICIAL (ClubElo).";
-
-    const prompt = `🤖 ROL: Analista Capital Shield.
+    const isDNB = op.type === "VALUE_DNB";
     
-DETECTADO VALOR MATEMÁTICO:
-⚽ ${op.match}
-💰 Cuota Mercado: ${op.details.market_odd} (Valor: +${op.profit}%)
-🧮 Cuota Justa: ${op.details.fair_odd}
-📊 ELO: ${op.details.elo_h} ${op.details.est_h ? '(Est)' : ''} vs ${op.details.elo_a} ${op.details.est_a ? '(Est)' : ''}
+    // PROMPT ESPECÍFICO PARA DNB
+    const prompt = `🤖 ROL: Analista Capital Shield (Modo: PROTECCIÓN DE CAPITAL).
+    
+🛡️ ESTRATEGIA: EMPATE NO VÁLIDO (DNB / Hándicap 0.0)
+⚽ PARTIDO: ${op.match}
+👉 SELECCIÓN: ${op.pick}
 
-${warningText}
+💰 DATOS FINANCIEROS:
+- Cuota 1X2 (Riesgo): ${op.details.market_1x2}
+- Cuota DNB Sintética (Escudo): ${op.details.market_dnb}
+- Valor Detectado: +${op.profit}% sobre la Cuota Justa (${op.details.fair_odd})
 
-TU TAREA:
-1. Si el ELO es estimado, busca en Google si los equipos son parejos o si la cuota es una trampa.
-2. Busca Noticias de Lesiones.
-3. VEREDICTO: ¿Apuesto o es un error de cálculo?`;
+📊 ELO:
+- Local: ${op.details.elo_h} vs Visita: ${op.details.elo_a}
+${op.details.est ? '(⚠️ ELO Estimado - Verificar Nivel)' : '(✅ ELO Oficial ClubElo)'}
+
+TU TAREA OBLIGATORIA:
+1.  Busca H2H recientes: ¿El equipo "${op.pick}" suele perder contra este rival?
+2.  Busca Lesiones Clave HOY.
+3.  **VEREDICTO:** ¿Es seguro entrar al DNB? (Recuerda: Si empatan, nos devuelven el dinero. Solo perdemos si pierde).
+4.  DAME EL STAKE (1-5).`;
     
     navigator.clipboard.writeText(prompt);
     setCopiedId(op.match);
@@ -136,7 +136,6 @@ TU TAREA:
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
               <Shield className="text-emerald-500" /> Capital<span className="text-emerald-500">Shield</span>
             </h1>
-            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Arbitrage & Value Engine</p>
           </div>
           <div className="flex gap-2">
             <select 
@@ -156,27 +155,26 @@ TU TAREA:
             
             {!loading && opportunities.length === 0 && (
                 <div className="text-center py-20 border border-dashed border-white/10 rounded-xl">
-                    <p className="text-slate-500 text-sm">Sin discrepancias matemáticas en este mercado.</p>
+                    <p className="text-slate-500 text-sm">Sin oportunidades de Valor DNB o Surebets.</p>
                 </div>
             )}
 
             {opportunities.map((op: any, idx) => (
-                <div key={idx} className={`relative bg-[#0a0a0a] rounded-xl overflow-hidden border ${op.type === 'SUREBET' ? 'border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'border-blue-500/30'}`}>
+                <div key={idx} className={`relative bg-[#0a0a0a] rounded-xl overflow-hidden border ${op.type === 'SUREBET' ? 'border-emerald-500/50' : 'border-indigo-500/30'}`}>
                     
                     <div className="p-4 flex justify-between items-start border-b border-white/5 bg-white/[0.02]">
                         <div>
                             <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${op.type === 'SUREBET' ? 'bg-emerald-500 text-black' : 'bg-blue-600 text-white'}`}>
-                                    {op.type}
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${op.type === 'SUREBET' ? 'bg-emerald-500 text-black' : 'bg-indigo-600 text-white'}`}>
+                                    {op.type === 'VALUE_DNB' ? '🛡️ DNB VALOR' : '💸 SUREBET'}
                                 </span>
                             </div>
                             <h3 className="font-bold text-white text-lg">{op.match}</h3>
                         </div>
                         <div className="text-right">
-                            <span className={`text-xl font-bold font-mono ${op.type === 'SUREBET' ? 'text-emerald-400' : 'text-blue-400'}`}>
+                            <span className={`text-xl font-bold font-mono ${op.type === 'SUREBET' ? 'text-emerald-400' : 'text-indigo-400'}`}>
                                 +{op.profit}%
                             </span>
-                            <p className="text-[9px] text-slate-500 uppercase">Beneficio</p>
                         </div>
                     </div>
 
@@ -188,37 +186,23 @@ TU TAREA:
                         ) : (
                             <div>
                                 <div className="flex items-center justify-between gap-4 mb-4">
-                                    <div className="flex-1 bg-[#111] p-2 rounded border border-white/5 flex justify-between px-4 items-center">
-                                        <div className="text-center">
-                                            <p className="text-[10px] text-slate-500">MERCADO</p>
-                                            <p className="text-lg font-bold text-white">{op.details.market_odd}</p>
+                                    <div className="flex-1 bg-[#111] p-3 rounded border border-white/5 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-[10px] text-slate-500 font-bold mb-1">SELECCIÓN</p>
+                                            <p className="text-sm font-bold text-white">{op.pick}</p>
                                         </div>
-                                        <div className="w-px bg-white/10 h-8"></div>
-                                        <div className="text-center relative">
-                                            <p className="text-[10px] text-slate-500">ELO DIFF</p>
-                                            <div className="flex items-center gap-1">
-                                                <p className="text-lg font-bold text-blue-400">
-                                                    {op.details.elo_h - op.details.elo_a}
-                                                </p>
-                                                {/* ICONO DE ALERTA SI ES ESTIMADO */}
-                                                {(op.details.est_h || op.details.est_a) && (
-                                                    <div className="relative group/tooltip">
-                                                        <AlertTriangle size={14} className="text-yellow-500 cursor-help"/>
-                                                        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[9px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 transition-opacity">
-                                                            ELO ESTIMADO
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] text-slate-500 font-bold mb-1">CUOTA ESCUDO</p>
+                                            <p className="text-lg font-bold text-indigo-400">{op.details.market_dnb}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={() => copyPrompt(op)}
-                                    className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                                    className="w-full py-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
                                 >
                                     {copiedId === op.match ? <Check size={14}/> : <Zap size={14}/>}
-                                    {copiedId === op.match ? "PROMPT COPIADO" : "VALIDAR CON IA"}
+                                    {copiedId === op.match ? "PROMPT LISTO" : "ANALIZAR CON IA"}
                                 </button>
                             </div>
                         )}
