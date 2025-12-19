@@ -13,7 +13,7 @@ CORS(app)
 # ==========================================
 # 🔐 CONFIGURACIÓN
 # ==========================================
-API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
+API_FOOTBALL_KEY = "PEGA_TU_KEY_FOOTBALL_AQUI"
 HEADERS_FOOTBALL = {'x-rapidapi-host': "v3.football.api-sports.io", 'x-rapidapi-key': API_FOOTBALL_KEY}
 # ==========================================
 
@@ -51,17 +51,13 @@ def check_surebet(home, away, draw=None):
 def calc_dnb_odd(win_odd, draw_odd):
     """Convierte 1X2 a DNB (Empate no Válido)"""
     if draw_odd <= 1: return win_odd
-    # Fórmula: Cuota * (1 - (1/CuotaEmpate))
     return win_odd * (1 - (1/draw_odd))
 
 def check_value(elo_h, elo_a, dnb_market_odd):
     """Calcula valor basado en DNB"""
-    # Probabilidad Real según ELO (+100 localía)
     dr = elo_h - elo_a + 100 
     prob_real = 1 / (1 + 10 ** (-dr / 400))
     fair_odd = 1 / prob_real
-    
-    # Valor = (Cuota DNB Mercado - Cuota Justa)
     edge = (dnb_market_odd - fair_odd) / fair_odd * 100
     return round(edge, 2), round(fair_odd, 2)
 
@@ -121,28 +117,31 @@ def analizar():
                     opportunities.append({
                         "type": "VALUE_DNB",
                         "match": f"{home} vs {away}",
-                        "pick": f"{home} (DNB)",
+                        "pick": f"{home} (DNB)", # <--- ESTO FALTABA
                         "date": m['commence_time'],
                         "profit": edge_h,
                         "details": {
                             "elo_h": int(elo_h), "elo_a": int(elo_a), "est": est_h or est_a,
-                            "market_1x2": best_h, "market_dnb": round(dnb_h, 2), "fair_odd": fair_h
+                            "market_1x2": best_h, # <--- ESTO FALTABA
+                            "market_dnb": round(dnb_h, 2), # <--- ESTO FALTABA
+                            "fair_odd": fair_h
                         }
                     })
 
                 # Chequear valor VISITA
-                # (Para visita invertimos ELOs en la formula)
-                edge_a, fair_a = check_value(elo_a, elo_h - 200, dnb_a) # -200 para compensar localía inversa
+                edge_a, fair_a = check_value(elo_a, elo_h - 200, dnb_a)
                 if edge_a > 2.0:
                     opportunities.append({
                         "type": "VALUE_DNB",
                         "match": f"{home} vs {away}",
-                        "pick": f"{away} (DNB)",
+                        "pick": f"{away} (DNB)", # <--- ESTO FALTABA
                         "date": m['commence_time'],
                         "profit": edge_a,
                         "details": {
                             "elo_h": int(elo_h), "elo_a": int(elo_a), "est": est_h or est_a,
-                            "market_1x2": best_a, "market_dnb": round(dnb_a, 2), "fair_odd": fair_a
+                            "market_1x2": best_a, # <--- ESTO FALTABA
+                            "market_dnb": round(dnb_a, 2), # <--- ESTO FALTABA
+                            "fair_odd": fair_a
                         }
                     })
 
@@ -152,7 +151,7 @@ def analizar():
     except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/', methods=['GET'])
-def home(): return "CAPITAL SHIELD DNB", 200
+def home(): return "CAPITAL SHIELD DNB V2", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
