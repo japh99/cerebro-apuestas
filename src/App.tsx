@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import { 
-  Activity, RefreshCw, Zap, Search, Copy, Check, 
-  Calendar, Globe, Wallet, BarChart2, 
-  ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
-  Flame, History, Swords, TrendingUp, Terminal, Cpu, Bot, FileText, Globe2
+  Shield, RefreshCw, Zap, TrendingUp, DollarSign, 
+  Clock, Check, Copy, AlertTriangle, ExternalLink
 } from 'lucide-react';
 
-// === CONFIGURACIÓN DEL SISTEMA ===
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
-// 🔑 PEGA TUS 50 LLAVES DE ODDS API AQUÍ (Dentro de las comillas)
+// 🔑 TUS LLAVES
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -64,289 +61,177 @@ const ODDS_API_KEYS = [
 ];
 
 const LEAGUES = [
-  { code: 'soccer_uefa_champs_league', name: 'Champions League', flag: '🏆' },
-  { code: 'soccer_epl', name: 'Premier League', flag: '🇬🇧' },
-  { code: 'soccer_spain_la_liga', name: 'La Liga', flag: '🇪🇸' },
-  { code: 'soccer_germany_bundesliga', name: 'Bundesliga', flag: '🇩🇪' },
-  { code: 'soccer_italy_serie_a', name: 'Serie A', flag: '🇮🇹' },
-  { code: 'soccer_france_ligue_one', name: 'Ligue 1', flag: '🇫🇷' },
-  { code: 'soccer_netherlands_eredivisie', name: 'Eredivisie', flag: '🇳🇱' },
-  { code: 'soccer_portugal_primeira_liga', name: 'Primeira Liga', flag: '🇵🇹' }
+  { code: 'soccer_epl', name: '🇬🇧 Premier League' },
+  { code: 'soccer_spain_la_liga', name: '🇪🇸 La Liga' },
+  { code: 'soccer_uefa_champs_league', name: '🏆 Champions League' },
+  { code: 'soccer_italy_serie_a', name: '🇮🇹 Serie A' },
+  { code: 'soccer_germany_bundesliga', name: '🇩🇪 Bundesliga' },
+  { code: 'basketball_nba', name: '🏀 NBA' },
+  { code: 'baseball_mlb', name: '⚾ MLB' }
 ];
 
-// --- UTILIDADES ---
-const getRandomKey = () => {
-    if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0 || ODDS_API_KEYS[0].includes("TU_CLAVE")) return null;
-    return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
-};
+const getRandomKey = () => ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 
-const TeamLogo = ({ url, name }) => {
-    if (url) {
-        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
-    }
-    return (
-        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
-            {name ? name.substring(0, 2).toUpperCase() : "??"}
-        </div>
-    );
-};
-
-// ==========================================
-// 🚀 APLICACIÓN PRINCIPAL
-// ==========================================
 function App() {
-  const [matches, setMatches] = useState([]);
-  const [status, setStatus] = useState("SISTEMA ONLINE");
-  const [analyzingId, setAnalyzingId] = useState(null);
-  const [generatedPrompts, setGeneratedPrompts] = useState({});
-  const [copiedId, setCopiedId] = useState(null);
-  
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
+  const [opportunities, setOpportunities] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
-  const [bankroll, setBankroll] = useState("50000");
+  const [copiedId, setCopiedId] = useState(null);
 
-  // --- 1. ESCANEAR MERCADO ---
   const escanear = async () => {
-    setMatches([]); setGeneratedPrompts({});
-    setStatus("BUSCANDO EVENTOS...");
+    setLoading(true);
+    setOpportunities([]);
     try {
       const apiKey = getRandomKey();
-      if (!apiKey) throw new Error("Faltan las API Keys en el código");
-
-      // Intento 1: Full Data (Con BTTS)
-      let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts&oddsFormat=decimal`;
-      let res = await fetch(url);
-      let rawData = await res.json();
-
-      // Fallback: Si falla, intentar sin BTTS (Modo Seguro)
-      if (!res.ok || rawData.message || !Array.isArray(rawData)) {
-        console.warn("Reintentando modo seguro (sin BTTS)...");
-        url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals&oddsFormat=decimal`;
-        res = await fetch(url);
-        rawData = await res.json();
-      }
-
-      if (rawData.message) throw new Error(rawData.message);
-      if (!Array.isArray(rawData)) throw new Error("Error de conexión con API Odds");
-
-      // Filtro de fecha
-      const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
-      
-      if (valid.length === 0) {
-        setStatus("MERCADO CERRADO HOY.");
-        return;
-      }
-
-      setStatus(`PROCESANDO IMÁGENES...`);
-      // Sincronizar con Python (Cache + Logos)
-      const resPython = await fetch(`${PYTHON_BACKEND_URL}/sincronizar-cache`, {
-        method: 'POST', 
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ partidos: valid })
-      });
-      const dataPython = await resPython.json();
-      
-      // Unir datos con logos
-      const matchesWithLogos = valid.map(m => ({
-        ...m,
-        home_logo: dataPython.logos?.[m.home_team] || null,
-        away_logo: dataPython.logos?.[m.away_team] || null
-      }));
-      
-      setMatches(matchesWithLogos);
-      setStatus(`✅ LISTO: ${valid.length} EVENTOS`);
-
-    } catch (e) {
-      setStatus(`❌ ERROR: ${e.message}`);
-    }
-  };
-
-  // --- 2. GENERAR PROMPT MAESTRO ---
-  const generarPrompt = async (match) => {
-    setAnalyzingId(match.id);
-    try {
-      // Extracción de Cuotas (Manejo de errores si no existen)
-      let oddHome = 0, oddDraw = 0, oddAway = 0;
-      let over25 = "ND", under25 = "ND", bttsYes = "ND", bttsNo = "ND";
-
-      for (const bookie of match.bookmakers) {
-        const h2h = bookie.markets.find(m => m.key === 'h2h');
-        if (h2h && oddHome === 0) {
-            oddHome = h2h.outcomes.find(o => o.name === match.home_team)?.price;
-            oddAway = h2h.outcomes.find(o => o.name === match.away_team)?.price;
-            oddDraw = h2h.outcomes.find(o => o.name === 'Draw')?.price;
-        }
-        const totals = bookie.markets.find(m => m.key === 'totals');
-        if (totals && over25 === "ND") {
-            over25 = totals.outcomes.find(o => o.name === 'Over' && o.point === 2.5)?.price || "ND";
-            under25 = totals.outcomes.find(o => o.name === 'Under' && o.point === 2.5)?.price || "ND";
-        }
-        const btts = bookie.markets.find(m => m.key === 'btts');
-        if (btts && bttsYes === "ND") {
-            bttsYes = btts.outcomes.find(o => o.name === 'Yes')?.price || "ND";
-            bttsNo = btts.outcomes.find(o => o.name === 'No')?.price || "ND";
-        }
-      }
-
-      // Llamada al Backend Matemático
-      const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_completo`, {
+      const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_mercado`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          home_team: match.home_team,
-          away_team: match.away_team,
-          odd_home: oddHome || 2.0,
-          odd_draw: oddDraw || 3.0,
-          odd_away: oddAway || 2.0
-        })
+        body: JSON.stringify({ api_key: apiKey, league: selectedLeague })
       });
       const data = await res.json();
       
-      // === PROMPT PARA LA IA ===
-      const prompt = `## 🕵️‍♂️ ROL: GESTOR DE INVERSIONES (BetSmart AI)
-
-### 1. 🏦 GESTIÓN DE CAPITAL
-- **Bankroll:** $${bankroll} COP
-- **Stake 1/10:** $${(parseInt(bankroll)/70).toFixed(0)} COP
-
-### 2. 📋 EVENTO
-- **Partido:** ${match.home_team} vs ${match.away_team}
-- **Liga:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
-
-### 3. 📊 MERCADO (SI FALTA UN DATO, BÚSCALO)
-- **1X2:** 1[@${oddHome}] | X[@${oddDraw}] | 2[@${oddAway}]
-- **Goles (2.5):** Over[@${over25}] | Under[@${under25}]
-- **BTTS:** Sí[@${bttsYes}] | No[@${bttsNo}]
-
-### 4. 🩻 RADIOGRAFÍA TÉCNICA (Backend)
-**🏠 LOCAL (${match.home_team}):**
-- **🔥 MOMENTUM (Forma 5p):** [ ${data.stats.home.form || '?-?-?-?-?'} ] (W=Ganó, L=Perdió)
-- **Calidad (xG):** Ataque ${data.stats.home.xg_for} | Defensa ${data.stats.home.xg_against}
-- **Volumen:** ${data.stats.home.shots} tiros/p.
-
-**✈️ VISITA (${match.away_team}):**
-- **🔥 MOMENTUM (Forma 5p):** [ ${data.stats.away.form || '?-?-?-?-?'} ] (W=Ganó, L=Perdió)
-- **Calidad (xG):** Ataque ${data.stats.away.xg_for} | Defensa ${data.stats.away.xg_against}
-- **Volumen:** ${data.stats.away.shots} tiros/p.
-
-### 5. 🧠 CEREBRO MATEMÁTICO
-- **ELO:** Local ${data.elo.home} vs Visita ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
-- **PREDICCIÓN IA:**
-  - BTTS (Sí): ${data.model_result.btts_prob}%
-  - Over 2.5: ${data.model_result.over_prob}%
-
-### 📝 INSTRUCCIONES CRÍTICAS PARA EL ASISTENTE:
-
-1.  🚨 **PROTOCOLO DE BÚSQUEDA OBLIGATORIA:**
-    - Si ves "@ND" en cuotas, **BÚSCALAS EN INTERNET**.
-    - **HISTORIAL H2H:** Busca los últimos 5 enfrentamientos directos entre ellos.
-
-2.  **CÁLCULO DE VALOR (EV+):**
-    Cruza mis predicciones con las cuotas reales.
-
-3.  **ANÁLISIS HÍBRIDO:**
-    Si el Modelo Matemático discrepa con la Forma Reciente (Momentum), **prioriza el Momentum y el xG**.
-
-4.  **VEREDICTO:**
-    Dame la apuesta, el STAKE y el MONTO.`;
-
-      setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
-
+      if (data.error) throw new Error(data.error);
+      setOpportunities(data);
+      
     } catch (e) {
-      alert("Error al generar análisis");
+      alert("Error: " + e.message);
     } finally {
-      setAnalyzingId(null);
+      setLoading(false);
     }
   };
 
-  const copiar = (id, text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
+  const copyPrompt = (op: any) => {
+    const prompt = `🤖 ROL: Analista Capital Shield.
+    
+DETECTADO VALOR MATEMÁTICO:
+⚽ ${op.match}
+💰 Cuota Mercado: ${op.details.market_odd} (Valor: +${op.profit}%)
+🧮 Cuota Justa (ELO): ${op.details.fair_odd}
+📊 ELO: ${op.details.elo_h} vs ${op.details.elo_a}
+
+TU TAREA:
+1. Busca noticias de última hora (Lesiones).
+2. Busca H2H reciente.
+3. Confirma si el valor matemático es real o si hay una baja importante que justifica la cuota alta.`;
+    
+    navigator.clipboard.writeText(prompt);
+    setCopiedId(op.match);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-gray-200 font-sans pb-32">
-      <div className="max-w-4xl mx-auto p-4 md:p-8">
+    <div className="min-h-screen bg-[#050505] text-slate-200 font-sans p-4">
+      <div className="max-w-3xl mx-auto">
         
         {/* HEADER */}
-        <div className="flex justify-between items-end mb-10 border-b border-white/10 pb-6">
+        <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                <Activity className="text-emerald-500" size={28}/>
-                BetSmart <span className="text-emerald-500">TITANIUM</span>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Shield className="text-emerald-500" /> Capital<span className="text-emerald-500">Shield</span>
             </h1>
-            <p className="text-xs text-slate-500 font-bold tracking-widest uppercase pl-1 mt-1">Next Gen Sports Terminal</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Arbitrage & Value Engine</p>
+          </div>
+          <div className="flex gap-2">
+            <select 
+                value={selectedLeague} 
+                onChange={(e) => setSelectedLeague(e.target.value)}
+                className="bg-[#111] border border-white/10 text-xs rounded-lg px-3 py-2 outline-none text-white"
+            >
+                {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+            </select>
+            <button onClick={escanear} className="bg-white hover:bg-gray-200 text-black p-2 rounded-lg transition-colors">
+                <RefreshCw className={loading ? "animate-spin" : ""} size={18}/>
+            </button>
           </div>
         </div>
 
-        {/* DASHBOARD */}
-        <div className="bg-[#0a0a0a] rounded-xl border border-white/10 p-5 mb-8 shadow-lg">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Capital</label>
-                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-emerald-500/50 transition-colors"/>
+        {/* LISTA DE OPORTUNIDADES */}
+        <div className="grid gap-4">
+            
+            {/* Mensaje vacío */}
+            {!loading && opportunities.length === 0 && (
+                <div className="text-center py-20 border border-dashed border-white/10 rounded-xl">
+                    <p className="text-slate-500 text-sm">Sin discrepancias matemáticas en este mercado.</p>
                 </div>
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Fecha</label>
-                    <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-indigo-500/50 transition-colors"/>
-                </div>
-                <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Mercado</label>
-                    <div className="relative">
-                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none appearance-none cursor-pointer">
-                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
-                        </select>
-                        <ChevronRight size={12} className="absolute right-3 top-3 text-slate-600 rotate-90 pointer-events-none"/>
+            )}
+
+            {opportunities.map((op: any, idx) => (
+                <div key={idx} className={`relative bg-[#0a0a0a] rounded-xl overflow-hidden border ${op.type === 'SUREBET' ? 'border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.1)]' : 'border-blue-500/30'}`}>
+                    
+                    {/* Header Tarjeta */}
+                    <div className="p-4 flex justify-between items-start border-b border-white/5 bg-white/[0.02]">
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${op.type === 'SUREBET' ? 'bg-emerald-500 text-black' : 'bg-blue-600 text-white'}`}>
+                                    {op.type}
+                                </span>
+                                <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                                    <Clock size={10}/> {new Date(op.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+                            </div>
+                            <h3 className="font-bold text-white text-lg">{op.match}</h3>
+                        </div>
+                        <div className="text-right">
+                            <span className={`text-xl font-bold font-mono ${op.type === 'SUREBET' ? 'text-emerald-400' : 'text-blue-400'}`}>
+                                +{op.profit}%
+                            </span>
+                            <p className="text-[9px] text-slate-500 uppercase">Beneficio Teórico</p>
+                        </div>
+                    </div>
+
+                    {/* Cuerpo */}
+                    <div className="p-4">
+                        {op.type === 'SUREBET' ? (
+                            // DISEÑO SUREBET (VERDE)
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div className="bg-[#111] p-2 rounded border border-white/5">
+                                    <p className="text-[10px] text-slate-500">1 (LOCAL)</p>
+                                    <p className="text-white font-bold">{op.details["1"].odd}</p>
+                                    <p className="text-[9px] text-emerald-500 truncate">{op.details["1"].bookie}</p>
+                                </div>
+                                <div className="bg-[#111] p-2 rounded border border-white/5">
+                                    <p className="text-[10px] text-slate-500">X (EMPATE)</p>
+                                    <p className="text-white font-bold">{op.details["X"].odd}</p>
+                                    <p className="text-[9px] text-emerald-500 truncate">{op.details["X"].bookie}</p>
+                                </div>
+                                <div className="bg-[#111] p-2 rounded border border-white/5">
+                                    <p className="text-[10px] text-slate-500">2 (VISITA)</p>
+                                    <p className="text-white font-bold">{op.details["2"].odd}</p>
+                                    <p className="text-[9px] text-emerald-500 truncate">{op.details["2"].bookie}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            // DISEÑO VALUE BET (AZUL - CON IA)
+                            <div>
+                                <div className="flex items-center justify-between gap-4 mb-4">
+                                    {op.details.logo_h && <img src={op.details.logo_h} className="w-10 h-10 object-contain"/>}
+                                    <div className="flex-1 bg-[#111] p-2 rounded border border-white/5 flex justify-between px-4">
+                                        <div className="text-center">
+                                            <p className="text-[10px] text-slate-500">CUOTA MERCADO</p>
+                                            <p className="text-lg font-bold text-white">{op.details.market_odd}</p>
+                                        </div>
+                                        <div className="w-px bg-white/10"></div>
+                                        <div className="text-center">
+                                            <p className="text-[10px] text-slate-500">CUOTA JUSTA</p>
+                                            <p className="text-lg font-bold text-blue-400">{op.details.fair_odd}</p>
+                                        </div>
+                                    </div>
+                                    {op.details.logo_a && <img src={op.details.logo_a} className="w-10 h-10 object-contain"/>}
+                                </div>
+                                <button 
+                                    onClick={() => copyPrompt(op)}
+                                    className="w-full py-3 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                                >
+                                    {copiedId === op.match ? <Check size={14}/> : <Zap size={14}/>}
+                                    {copiedId === op.match ? "PROMPT COPIADO" : "VALIDAR CON IA"}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
-            </div>
-            <button onClick={escanear} className="w-full bg-white hover:bg-gray-200 text-black py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all">
-                {status.includes("...") ? <RefreshCw className="animate-spin" size={18}/> : <Search size={18}/>}
-                {status}
-            </button>
+            ))}
         </div>
 
-        {/* CARDS CON LOGOS */}
-        <div className="grid gap-5">
-          {matches.map(m => (
-            <div key={m.id} className="group bg-[#0a0a0a] rounded-2xl border border-white/5 p-6 hover:border-white/10 transition-all shadow-lg relative overflow-hidden">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-                <div className="flex-1 w-full flex items-center justify-between">
-                    <div className="flex flex-col items-center gap-2 w-24">
-                        <TeamLogo url={m.home_logo} name={m.home_team} />
-                        <span className="text-xs font-bold text-white text-center leading-tight">{m.home_team}</span>
-                    </div>
-                    <div className="flex flex-col items-center px-4">
-                        <span className="text-[10px] font-bold text-slate-600 mb-1">VS</span>
-                        <span className="text-[10px] font-mono text-emerald-500 bg-emerald-900/20 px-2 py-0.5 rounded">{m.commence_time.split('T')[1].slice(0,5)}</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-2 w-24">
-                        <TeamLogo url={m.away_logo} name={m.away_team} />
-                        <span className="text-xs font-bold text-white text-center leading-tight">{m.away_team}</span>
-                    </div>
-                </div>
-                <div className="w-full md:w-auto flex flex-col gap-2">
-                    {!generatedPrompts[m.id] ? (
-                        <button onClick={() => generarPrompt(m)} disabled={analyzingId === m.id} className="w-full md:w-32 py-2.5 bg-[#151515] hover:bg-[#222] border border-white/10 rounded-lg text-[10px] font-bold text-white flex items-center justify-center gap-2 transition-all group-hover:border-emerald-500/30 group-hover:text-emerald-400">
-                            {analyzingId === m.id ? <RefreshCw className="animate-spin" size={12}/> : <Zap size={12}/>}
-                            ANALIZAR
-                        </button>
-                    ) : (
-                        <div className="flex gap-2 animate-in fade-in">
-                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`flex-1 py-2.5 px-4 rounded-lg font-bold text-[10px] flex items-center justify-center gap-1 transition-all ${copiedId === m.id ? 'bg-emerald-500 text-black' : 'bg-emerald-900/30 text-emerald-400 border border-emerald-500/30'}`}>
-                                {copiedId === m.id ? <Check size={12}/> : <Copy size={12}/>} {copiedId === m.id ? "LISTO" : "COPIAR"}
-                            </button>
-                            <a href="https://chat.openai.com" target="_blank" className="w-10 flex items-center justify-center bg-[#151515] border border-white/10 rounded-lg hover:border-white/30 text-slate-400 hover:text-white transition-colors">
-                                <Bot size={14}/>
-                            </a>
-                        </div>
-                    )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );
