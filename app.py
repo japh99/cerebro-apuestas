@@ -11,72 +11,60 @@ app = Flask(__name__)
 CORS(app)
 
 # ==========================================
-# 🔐 CONFIGURACIÓN DE LLAVES
+# 🔐 CONFIGURACIÓN
 # ==========================================
 API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
+HEADERS_FOOTBALL = {'x-rapidapi-host': "v3.football.api-sports.io", 'x-rapidapi-key': API_FOOTBALL_KEY}
 # ==========================================
 
-HEADERS_FOOTBALL = {
-    'x-rapidapi-host': "v3.football.api-sports.io",
-    'x-rapidapi-key': API_FOOTBALL_KEY
-}
-
-# --- MEMORIA ELO ---
 elo_database = {}
 
 def load_elo():
     global elo_database
-    print("🌍 Descargando base de datos ELO...")
+    print("🌍 Descargando ELO...")
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get("http://api.clubelo.com/All", headers=headers)
         content = r.content.decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
-        for row in reader:
-            elo_database[row['Club']] = float(row['Elo'])
+        for row in reader: elo_database[row['Club']] = float(row['Elo'])
         print(f"✅ {len(elo_database)} equipos cargados.")
-    except Exception as e:
-        print(f"❌ Error ClubElo: {e}")
+    except: print("❌ Error ClubElo")
 
-load_elo() 
-
-# --- MOTORES MATEMÁTICOS ---
+load_elo()
 
 def get_elo_from_odds(odd):
-    if odd <= 1.01: return 2000 
-    prob_implicita = 1 / float(odd)
-    elo_estimado = 1500 + ((prob_implicita - 0.33) * 600) 
-    return elo_estimado
+    if odd <= 1.01: return 2000
+    prob = 1 / float(odd)
+    return 1500 + ((prob - 0.33) * 600)
 
 def find_elo(team, current_odd):
-    """
-    Retorna: (ELO, es_estimado)
-    es_estimado = True si no se encontró en la base de datos y se calculó.
-    """
-    # 1. Búsqueda Difusa
-    matches = difflib.get_close_matches(team, elo_database.keys(), n=1, cutoff=0.6) # Subimos cutoff para ser más estrictos
-    
-    if matches:
-        # Encontrado en Base de Datos (ELO REAL)
-        return elo_database[matches[0]], False 
-    else:
-        # No encontrado (ELO ESTIMADO)
-        return get_elo_from_odds(current_odd), True
+    matches = difflib.get_close_matches(team, elo_database.keys(), n=1, cutoff=0.5)
+    if matches: return elo_database[matches[0]], False
+    return get_elo_from_odds(current_odd), True
 
 def check_surebet(home, away, draw=None):
     inv = (1/home) + (1/away) + ((1/draw) if draw else 0)
-    if inv < 1.0:
-        return (1 - inv) * 100 
+    if inv < 1.0: return (1 - inv) * 100
     return 0
 
-def check_value(elo_h, elo_a, odd_h):
+def calc_dnb_odd(win_odd, draw_odd):
+    """Convierte 1X2 a DNB (Empate no Válido)"""
+    if draw_odd <= 1: return win_odd
+    # Fórmula: Cuota * (1 - (1/CuotaEmpate))
+    return win_odd * (1 - (1/draw_odd))
+
+def check_value(elo_h, elo_a, dnb_market_odd):
+    """Calcula valor basado en DNB"""
+    # Probabilidad Real según ELO (+100 localía)
     dr = elo_h - elo_a + 100 
     prob_real = 1 / (1 + 10 ** (-dr / 400))
     fair_odd = 1 / prob_real
-    edge = (odd_h - fair_odd) / fair_odd * 100
+    
+    # Valor = (Cuota DNB Mercado - Cuota Justa)
+    edge = (dnb_market_odd - fair_odd) / fair_odd * 100
     return round(edge, 2), round(fair_odd, 2)
 
-# --- RUTA PRINCIPAL ---
 @app.route('/analizar_mercado', methods=['POST'])
 def analizar():
     data = request.json
@@ -88,9 +76,7 @@ def analizar():
     try:
         res = requests.get(url)
         matches_data = res.json()
-        
-        if not isinstance(matches_data, list):
-            return jsonify({"error": "Error en API Odds"}), 400
+        if not isinstance(matches_data, list): return jsonify({"error": "Error API"}), 400
 
         opportunities = []
 
@@ -98,7 +84,6 @@ def analizar():
             home = m['home_team']
             away = m['away_team']
             
-            # 1. Buscar mejores cuotas
             best_h = 0; bk_h = ""
             best_a = 0; bk_a = ""
             best_d = 0; bk_d = ""
@@ -112,53 +97,62 @@ def analizar():
             
             if best_h == 0: continue
 
-            # 2. DETECTAR SUREBET
-            arb_profit = check_surebet(best_h, best_a, best_d)
-            if arb_profit > 0:
+            # 1. SUREBETS
+            arb = check_surebet(best_h, best_a, best_d)
+            if arb > 0:
                 opportunities.append({
-                    "type": "SUREBET",
-                    "match": f"{home} vs {away}",
-                    "date": m['commence_time'],
-                    "profit": round(arb_profit, 2),
-                    "details": {
-                        "1": {"odd": best_h, "bookie": bk_h},
-                        "X": {"odd": best_d, "bookie": bk_d},
-                        "2": {"odd": best_a, "bookie": bk_a}
-                    }
+                    "type": "SUREBET", "match": f"{home} vs {away}", "date": m['commence_time'], "profit": round(arb, 2),
+                    "details": {"1": {"odd": best_h}, "X": {"odd": best_d}, "2": {"odd": best_a}}
                 })
                 continue 
 
-            # 3. DETECTAR VALOR (Fútbol)
-            if "soccer" in league:
-                # Obtenemos ELO y si es estimado o no
+            # 2. VALOR EN HÁNDICAP (DNB)
+            if "soccer" in league and best_d > 0:
                 elo_h, est_h = find_elo(home, best_h)
                 elo_a, est_a = find_elo(away, best_a)
                 
-                edge, fair = check_value(elo_h, elo_a, best_h)
+                # Calculamos DNB para ambos
+                dnb_h = calc_dnb_odd(best_h, best_d)
+                dnb_a = calc_dnb_odd(best_a, best_d)
                 
-                if edge > 1.0: 
+                # Chequear valor LOCAL
+                edge_h, fair_h = check_value(elo_h, elo_a, dnb_h)
+                if edge_h > 2.0:
                     opportunities.append({
-                        "type": "VALUE",
+                        "type": "VALUE_DNB",
                         "match": f"{home} vs {away}",
+                        "pick": f"{home} (DNB)",
                         "date": m['commence_time'],
-                        "profit": edge,
+                        "profit": edge_h,
                         "details": {
-                            "home": home, "away": away,
-                            "elo_h": int(elo_h), "elo_a": int(elo_a),
-                            "est_h": est_h, "est_a": est_a, # <--- Enviamos la bandera al frontend
-                            "market_odd": best_h, "fair_odd": fair,
-                            "logo_h": None, "logo_a": None
+                            "elo_h": int(elo_h), "elo_a": int(elo_a), "est": est_h or est_a,
+                            "market_1x2": best_h, "market_dnb": round(dnb_h, 2), "fair_odd": fair_h
                         }
                     })
 
-        opportunities.sort(key=lambda x: (x['type'] == 'SUREBET', x['profit']), reverse=True)
+                # Chequear valor VISITA
+                # (Para visita invertimos ELOs en la formula)
+                edge_a, fair_a = check_value(elo_a, elo_h - 200, dnb_a) # -200 para compensar localía inversa
+                if edge_a > 2.0:
+                    opportunities.append({
+                        "type": "VALUE_DNB",
+                        "match": f"{home} vs {away}",
+                        "pick": f"{away} (DNB)",
+                        "date": m['commence_time'],
+                        "profit": edge_a,
+                        "details": {
+                            "elo_h": int(elo_h), "elo_a": int(elo_a), "est": est_h or est_a,
+                            "market_1x2": best_a, "market_dnb": round(dnb_a, 2), "fair_odd": fair_a
+                        }
+                    })
+
+        opportunities.sort(key=lambda x: x['profit'], reverse=True)
         return jsonify(opportunities)
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception as e: return jsonify({"error": str(e)}), 500
 
 @app.route('/', methods=['GET'])
-def home(): return "CAPITAL SHIELD v2.0", 200
+def home(): return "CAPITAL SHIELD DNB", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
