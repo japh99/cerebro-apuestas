@@ -13,11 +13,7 @@ CORS(app)
 # ==========================================
 # 🔐 CONFIGURACIÓN DE LLAVES
 # ==========================================
-# Pega tu llave de API-FOOTBALL aquí para los logos
-API_FOOTBALL_KEY = "PEGA_TU_KEY_FOOTBALL_AQUI"
-
-# Las llaves de ODDS API vienen del Frontend (React) en cada petición
-# para rotarlas mejor.
+API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
 # ==========================================
 
 HEADERS_FOOTBALL = {
@@ -25,15 +21,15 @@ HEADERS_FOOTBALL = {
     'x-rapidapi-key': API_FOOTBALL_KEY
 }
 
-# --- MEMORIA ELO (Se carga al iniciar) ---
+# --- MEMORIA ELO ---
 elo_database = {}
 
 def load_elo():
-    """Descarga ELOs de ClubElo.com al iniciar"""
     global elo_database
     print("🌍 Descargando base de datos ELO...")
     try:
-        r = requests.get("http://api.clubelo.com/All")
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get("http://api.clubelo.com/All", headers=headers)
         content = r.content.decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
         for row in reader:
@@ -42,38 +38,41 @@ def load_elo():
     except Exception as e:
         print(f"❌ Error ClubElo: {e}")
 
-load_elo() # Ejecutar al inicio
-
-# --- UTILIDADES ---
-def find_elo(team):
-    matches = difflib.get_close_matches(team, elo_database.keys(), n=1, cutoff=0.6)
-    return elo_database[matches[0]] if matches else 1450.0
-
-def get_logo(team_name):
-    # Función simple para buscar logo en API-Football
-    try:
-        url = f"https://v3.football.api-sports.io/teams?name={team_name}"
-        res = requests.get(url, headers=HEADERS_FOOTBALL).json()
-        if res['response']:
-            return res['response'][0]['team']['logo']
-    except: pass
-    return None
+load_elo() 
 
 # --- MOTORES MATEMÁTICOS ---
+
+def get_elo_from_odds(odd):
+    if odd <= 1.01: return 2000 
+    prob_implicita = 1 / float(odd)
+    elo_estimado = 1500 + ((prob_implicita - 0.33) * 600) 
+    return elo_estimado
+
+def find_elo(team, current_odd):
+    """
+    Retorna: (ELO, es_estimado)
+    es_estimado = True si no se encontró en la base de datos y se calculó.
+    """
+    # 1. Búsqueda Difusa
+    matches = difflib.get_close_matches(team, elo_database.keys(), n=1, cutoff=0.6) # Subimos cutoff para ser más estrictos
+    
+    if matches:
+        # Encontrado en Base de Datos (ELO REAL)
+        return elo_database[matches[0]], False 
+    else:
+        # No encontrado (ELO ESTIMADO)
+        return get_elo_from_odds(current_odd), True
+
 def check_surebet(home, away, draw=None):
-    # Inversas
     inv = (1/home) + (1/away) + ((1/draw) if draw else 0)
     if inv < 1.0:
-        return (1 - inv) * 100 # % Ganancia Segura
+        return (1 - inv) * 100 
     return 0
 
 def check_value(elo_h, elo_a, odd_h):
-    # Probabilidad Real según ELO
-    dr = elo_h - elo_a + 100 # +100 localía
+    dr = elo_h - elo_a + 100 
     prob_real = 1 / (1 + 10 ** (-dr / 400))
     fair_odd = 1 / prob_real
-    
-    # Valor = (Cuota Mercado - Cuota Justa) / Cuota Justa
     edge = (odd_h - fair_odd) / fair_odd * 100
     return round(edge, 2), round(fair_odd, 2)
 
@@ -107,12 +106,9 @@ def analizar():
             for bookie in m['bookmakers']:
                 for out in bookie['markets'][0]['outcomes']:
                     price = out['price']
-                    name = out['name']
-                    title = bookie['title']
-                    
-                    if name == home and price > best_h: best_h = price; bk_h = title
-                    elif name == away and price > best_a: best_a = price; bk_a = title
-                    elif name == 'Draw' and price > best_d: best_d = price; bk_d = title
+                    if out['name'] == home and price > best_h: best_h = price; bk_h = bookie['title']
+                    elif out['name'] == away and price > best_a: best_a = price; bk_a = bookie['title']
+                    elif out['name'] == 'Draw' and price > best_d: best_d = price; bk_d = bookie['title']
             
             if best_h == 0: continue
 
@@ -130,19 +126,17 @@ def analizar():
                         "2": {"odd": best_a, "bookie": bk_a}
                     }
                 })
-                continue # Si es surebet, no analizamos valor, ya es oro.
+                continue 
 
-            # 3. DETECTAR VALOR (Solo Fútbol)
+            # 3. DETECTAR VALOR (Fútbol)
             if "soccer" in league:
-                elo_h = find_elo(home)
-                elo_a = find_elo(away)
+                # Obtenemos ELO y si es estimado o no
+                elo_h, est_h = find_elo(home, best_h)
+                elo_a, est_a = find_elo(away, best_a)
+                
                 edge, fair = check_value(elo_h, elo_a, best_h)
                 
-                if edge > 3.0: # Solo si hay más de 3% de valor
-                    # Obtenemos logos solo para las oportunidades reales (ahorro de API)
-                    logo_h = get_logo(home)
-                    logo_a = get_logo(away)
-                    
+                if edge > 1.0: 
                     opportunities.append({
                         "type": "VALUE",
                         "match": f"{home} vs {away}",
@@ -151,21 +145,20 @@ def analizar():
                         "details": {
                             "home": home, "away": away,
                             "elo_h": int(elo_h), "elo_a": int(elo_a),
+                            "est_h": est_h, "est_a": est_a, # <--- Enviamos la bandera al frontend
                             "market_odd": best_h, "fair_odd": fair,
-                            "logo_h": logo_h, "logo_a": logo_a
+                            "logo_h": None, "logo_a": None
                         }
                     })
 
-        # Ordenar: Primero Surebets, luego Valor más alto
         opportunities.sort(key=lambda x: (x['type'] == 'SUREBET', x['profit']), reverse=True)
         return jsonify(opportunities)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Keep Alive para el Robot
 @app.route('/', methods=['GET'])
-def home(): return "CAPITAL SHIELD ACTIVE", 200
+def home(): return "CAPITAL SHIELD v2.0", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
