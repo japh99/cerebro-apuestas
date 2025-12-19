@@ -1,150 +1,171 @@
-import json
 import os
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import joblib
-import pandas as pd
+import json
 import requests
+import difflib
+import io
+import csv
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
 # ==========================================
-# 🔐 TU LLAVE DE FOOTBALL API
+# 🔐 CONFIGURACIÓN DE LLAVES
 # ==========================================
-API_FOOTBALL_KEY = "1df3d58221mshab1989b46146df0p194f53jsne69db977b9bc"
+# Pega tu llave de API-FOOTBALL aquí para los logos
+API_FOOTBALL_KEY = "PEGA_TU_KEY_FOOTBALL_AQUI"
+
+# Las llaves de ODDS API vienen del Frontend (React) en cada petición
+# para rotarlas mejor.
 # ==========================================
 
-HEADERS = {
+HEADERS_FOOTBALL = {
     'x-rapidapi-host': "v3.football.api-sports.io",
     'x-rapidapi-key': API_FOOTBALL_KEY
 }
-CACHE_FILE = "team_stats_cache.json"
 
-# Cargar Modelos
-try:
-    modelo_btts = joblib.load('btts_model.joblib')
-    modelo_ou = joblib.load('ou_model.joblib')
-    print("✅ Modelos cargados.")
-except:
-    modelo_btts = None
-    modelo_ou = None
+# --- MEMORIA ELO (Se carga al iniciar) ---
+elo_database = {}
 
-COLUMNAS_EXACTAS = ['OddHome', 'OddDraw', 'OddAway', 'Elo_Home', 'Elo_Away', 'Elo_Diff', 'Form3_Diff', 'Form5_Diff', 'Shots_Diff', 'Shots_Total', 'OddsRatio', 'Target_Diff', 'Target_Total']
+def load_elo():
+    """Descarga ELOs de ClubElo.com al iniciar"""
+    global elo_database
+    print("🌍 Descargando base de datos ELO...")
+    try:
+        r = requests.get("http://api.clubelo.com/All")
+        content = r.content.decode('utf-8')
+        reader = csv.DictReader(io.StringIO(content))
+        for row in reader:
+            elo_database[row['Club']] = float(row['Elo'])
+        print(f"✅ {len(elo_database)} equipos cargados.")
+    except Exception as e:
+        print(f"❌ Error ClubElo: {e}")
 
-def load_cache():
-    if os.path.exists(CACHE_FILE):
-        try: return json.load(open(CACHE_FILE))
-        except: return {}
-    return {}
+load_elo() # Ejecutar al inicio
 
-def save_cache(data):
-    with open(CACHE_FILE, 'w') as f: json.dump(data, f)
+# --- UTILIDADES ---
+def find_elo(team):
+    matches = difflib.get_close_matches(team, elo_database.keys(), n=1, cutoff=0.6)
+    return elo_database[matches[0]] if matches else 1450.0
 
-def obtener_stats_reales(equipo):
-    cache = load_cache()
-    if equipo in cache: return cache[equipo]
+def get_logo(team_name):
+    # Función simple para buscar logo en API-Football
+    try:
+        url = f"https://v3.football.api-sports.io/teams?name={team_name}"
+        res = requests.get(url, headers=HEADERS_FOOTBALL).json()
+        if res['response']:
+            return res['response'][0]['team']['logo']
+    except: pass
+    return None
+
+# --- MOTORES MATEMÁTICOS ---
+def check_surebet(home, away, draw=None):
+    # Inversas
+    inv = (1/home) + (1/away) + ((1/draw) if draw else 0)
+    if inv < 1.0:
+        return (1 - inv) * 100 # % Ganancia Segura
+    return 0
+
+def check_value(elo_h, elo_a, odd_h):
+    # Probabilidad Real según ELO
+    dr = elo_h - elo_a + 100 # +100 localía
+    prob_real = 1 / (1 + 10 ** (-dr / 400))
+    fair_odd = 1 / prob_real
+    
+    # Valor = (Cuota Mercado - Cuota Justa) / Cuota Justa
+    edge = (odd_h - fair_odd) / fair_odd * 100
+    return round(edge, 2), round(fair_odd, 2)
+
+# --- RUTA PRINCIPAL ---
+@app.route('/analizar_mercado', methods=['POST'])
+def analizar():
+    data = request.json
+    api_key = data.get('api_key')
+    league = data.get('league')
+    
+    url = f"https://api.the-odds-api.com/v4/sports/{league}/odds/?apiKey={api_key}&regions=eu&markets=h2h&oddsFormat=decimal"
     
     try:
-        # 1. Buscar Equipo (ID y LOGO)
-        url = f"https://v3.football.api-sports.io/teams?name={equipo}"
-        res = requests.get(url, headers=HEADERS).json()
+        res = requests.get(url)
+        matches_data = res.json()
         
-        if not res['response']: 
-            return {'shots': 10.0, 'corners': 5.0, 'logo': None}
-        
-        team_data = res['response'][0]['team']
-        id_eq = team_data['id']
-        logo_url = team_data['logo'] # <--- AQUÍ CAPTURAMOS EL LOGO
-        
-        # 2. Buscar Stats
-        url_fix = f"https://v3.football.api-sports.io/fixtures?team={id_eq}&last=5&status=FT"
-        matches = requests.get(url_fix, headers=HEADERS).json()['response']
-        
-        shots = 0; count = 0
-        for m in matches:
-            stats = m.get('statistics', [])
-            if not stats: continue
-            my_stats = next((s for s in stats if s['team']['id'] == id_eq), None)
-            if my_stats:
-                s = next((i['value'] for i in my_stats['statistics'] if i['type']=='Total Shots'), 0) or 0
-                shots += s; count += 1
-        
-        final = {
-            'shots': round(shots/max(1,count), 1), 
-            'corners': 5.0,
-            'logo': logo_url # <--- GUARDAMOS EL LOGO EN CACHÉ
-        }
-        cache[equipo] = final
-        save_cache(cache)
-        return final
-    except:
-        return {'shots': 10.0, 'corners': 5.0, 'logo': None}
+        if not isinstance(matches_data, list):
+            return jsonify({"error": "Error en API Odds"}), 400
 
-def get_elo(odd):
-    return 1500.0 + (( (1.0/max(float(odd),1.01)) - 0.5 ) * 600.0)
+        opportunities = []
 
-# --- RUTA ACTUALIZADA: DEVUELVE LOS LOGOS AL FRONTEND ---
-@app.route('/sincronizar-cache', methods=['POST'])
-def sync():
-    data = request.json
-    logos_encontrados = {}
-    
-    for p in data.get('partidos', []):
-        try:
-            # Obtenemos stats y de paso el logo
-            sh = obtener_stats_reales(p['home_team'])
-            sa = obtener_stats_reales(p['away_team'])
+        for m in matches_data:
+            home = m['home_team']
+            away = m['away_team']
             
-            # Guardamos los logos en un diccionario para enviarlos al Frontend
-            logos_encontrados[p['home_team']] = sh.get('logo')
-            logos_encontrados[p['away_team']] = sa.get('logo')
-        except: pass
-        
-    return jsonify({"status": "ok", "logos": logos_encontrados})
+            # 1. Buscar mejores cuotas
+            best_h = 0; bk_h = ""
+            best_a = 0; bk_a = ""
+            best_d = 0; bk_d = ""
+            
+            for bookie in m['bookmakers']:
+                for out in bookie['markets'][0]['outcomes']:
+                    price = out['price']
+                    name = out['name']
+                    title = bookie['title']
+                    
+                    if name == home and price > best_h: best_h = price; bk_h = title
+                    elif name == away and price > best_a: best_a = price; bk_a = title
+                    elif name == 'Draw' and price > best_d: best_d = price; bk_d = title
+            
+            if best_h == 0: continue
 
-@app.route('/analizar_completo', methods=['POST'])
-def analizar_completo():
-    data = request.json
-    home = data.get('home_team')
-    away = data.get('away_team')
-    odd_home = float(data.get('odd_home', 2.0))
-    odd_draw = float(data.get('odd_draw', 3.0))
-    odd_away = float(data.get('odd_away', 2.0))
+            # 2. DETECTAR SUREBET
+            arb_profit = check_surebet(best_h, best_a, best_d)
+            if arb_profit > 0:
+                opportunities.append({
+                    "type": "SUREBET",
+                    "match": f"{home} vs {away}",
+                    "date": m['commence_time'],
+                    "profit": round(arb_profit, 2),
+                    "details": {
+                        "1": {"odd": best_h, "bookie": bk_h},
+                        "X": {"odd": best_d, "bookie": bk_d},
+                        "2": {"odd": best_a, "bookie": bk_a}
+                    }
+                })
+                continue # Si es surebet, no analizamos valor, ya es oro.
 
-    s_home = obtener_stats_reales(home)
-    s_away = obtener_stats_reales(away)
-    elo_h = get_elo(odd_home)
-    elo_a = get_elo(odd_away)
-    
-    # ... (Cálculos matemáticos idénticos a la v9) ...
-    form_h = 15.0 if elo_h > 1550 else 10.0
-    form_a = 15.0 if elo_a > 1550 else 10.0
-    shots_h = float(s_home['shots'])
-    shots_a = float(s_away['shots'])
+            # 3. DETECTAR VALOR (Solo Fútbol)
+            if "soccer" in league:
+                elo_h = find_elo(home)
+                elo_a = find_elo(away)
+                edge, fair = check_value(elo_h, elo_a, best_h)
+                
+                if edge > 3.0: # Solo si hay más de 3% de valor
+                    # Obtenemos logos solo para las oportunidades reales (ahorro de API)
+                    logo_h = get_logo(home)
+                    logo_a = get_logo(away)
+                    
+                    opportunities.append({
+                        "type": "VALUE",
+                        "match": f"{home} vs {away}",
+                        "date": m['commence_time'],
+                        "profit": edge,
+                        "details": {
+                            "home": home, "away": away,
+                            "elo_h": int(elo_h), "elo_a": int(elo_a),
+                            "market_odd": best_h, "fair_odd": fair,
+                            "logo_h": logo_h, "logo_a": logo_a
+                        }
+                    })
 
-    features = {
-        'OddHome': odd_home, 'OddDraw': odd_draw, 'OddAway': odd_away,
-        'Elo_Home': elo_h, 'Elo_Away': elo_a, 'Elo_Diff': elo_h - elo_a,
-        'Form3_Diff': form_h - form_a, 'Form5_Diff': 0,
-        'Shots_Diff': shots_h - shots_a, 'Shots_Total': shots_h + shots_a,
-        'OddsRatio': odd_away / odd_home, 'Target_Diff': 0, 'Target_Total': 0
-    }
+        # Ordenar: Primero Surebets, luego Valor más alto
+        opportunities.sort(key=lambda x: (x['type'] == 'SUREBET', x['profit']), reverse=True)
+        return jsonify(opportunities)
 
-    btts_prob = 50.0
-    over_prob = 50.0
-    if modelo_btts:
-        try:
-            df = pd.DataFrame([features])[COLUMNAS_EXACTAS]
-            btts_prob = modelo_btts.predict_proba(df)[0][1] * 100
-            over_prob = modelo_ou.predict_proba(df)[0][1] * 100
-        except: pass
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    return jsonify({
-        "stats": {"home": s_home, "away": s_away},
-        "elo": {"home": int(elo_h), "away": int(elo_a)},
-        "model_result": {"btts_prob": round(btts_prob, 2), "over_prob": round(over_prob, 2)}
-    })
+# Keep Alive para el Robot
+@app.route('/', methods=['GET'])
+def home(): return "CAPITAL SHIELD ACTIVE", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
