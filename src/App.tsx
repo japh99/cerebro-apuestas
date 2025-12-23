@@ -3,14 +3,13 @@ import {
   Activity, RefreshCw, Zap, Search, Copy, Check, 
   Calendar, Globe, Wallet, BarChart2, 
   ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
-  Flame, History, Swords, TrendingUp, Layers, MapPin
+  Flame, History, Swords, TrendingUp, Layers, ListFilter
 } from 'lucide-react';
 
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
-// 🔑 LLAVES DE ODDS API (ROTACIÓN AUTOMÁTICA)
-const ODDS_API_KEYS = [
-  "734f30d0866696cf90d5029ac106cfba",
+// 🔑 PEGA TUS 3 LLAVES AQUÍ
+const ODDS_API_KEYS = ["734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
   "a9ff72549c4910f1fa9659e175a35cc0",
   "25e9d8872877f5110254ff6ef42056c6",
@@ -62,45 +61,15 @@ const ODDS_API_KEYS = [
   "86de2f86b0b628024ef6d5546b479c0f"
 ];
 
-// 🌍 LISTA MAESTRA DE TORNEOS
 const LEAGUES = [
-  // --- 🇪🇺 EUROPA ELITE (UEFA) ---
-  { code: 'soccer_uefa_champs_league', name: '🏆 Champions League', flag: '🇪🇺' },
-  { code: 'soccer_uefa_europa_league', name: '🇪🇺 Europa League', flag: '🇪🇺' },
-  { code: 'soccer_uefa_europa_conference_league', name: '🇪🇺 Conference League', flag: '🇪🇺' },
-
-  // --- 🇬🇧 INGLATERRA ---
+  { code: 'soccer_uefa_champs_league', name: 'Champions League', flag: '🏆' },
   { code: 'soccer_epl', name: 'Premier League', flag: '🇬🇧' },
-  { code: 'soccer_england_efl_cup', name: 'EFL Cup (Carabao)', flag: '🇬🇧' },
-  { code: 'soccer_fa_cup', name: 'FA Cup', flag: '🇬🇧' },
-
-  // --- 🇪🇸 ESPAÑA ---
   { code: 'soccer_spain_la_liga', name: 'La Liga', flag: '🇪🇸' },
   { code: 'soccer_spain_copa_del_rey', name: 'Copa del Rey', flag: '🇪🇸' },
-
-  // --- 🇮🇹 ITALIA ---
+  { code: 'soccer_england_efl_cup', name: 'EFL Cup', flag: '🇬🇧' },
   { code: 'soccer_italy_serie_a', name: 'Serie A', flag: '🇮🇹' },
-  { code: 'soccer_italy_coppa_italia', name: 'Coppa Italia', flag: '🇮🇹' },
-
-  // --- 🇩🇪 ALEMANIA ---
   { code: 'soccer_germany_bundesliga', name: 'Bundesliga', flag: '🇩🇪' },
-  { code: 'soccer_germany_dfb_pokal', name: 'DFB Pokal', flag: '🇩🇪' },
-
-  // --- 🇫🇷 FRANCIA ---
-  { code: 'soccer_france_ligue_one', name: 'Ligue 1', flag: '🇫🇷' },
-
-  // --- 🌎 AMÉRICA (LATAM & USA) ---
-  { code: 'soccer_conmebol_copa_libertadores', name: '🏆 Copa Libertadores', flag: '🌎' },
-  { code: 'soccer_conmebol_copa_sudamericana', name: '🏆 Copa Sudamericana', flag: '🌎' },
-  { code: 'soccer_brazil_campeonato', name: '🇧🇷 Brasileirão A', flag: '🇧🇷' },
-  { code: 'soccer_argentina_primera_division', name: '🇦🇷 Liga Profesional', flag: '🇦🇷' },
-  { code: 'soccer_mexico_ligamx', name: '🇲🇽 Liga MX', flag: '🇲🇽' },
-  { code: 'soccer_usa_mls', name: '🇺🇸 MLS', flag: '🇺🇸' },
-
-  // --- 🇪🇺 OTRAS LIGAS ---
-  { code: 'soccer_netherlands_eredivisie', name: 'Eredivisie', flag: '🇳🇱' },
-  { code: 'soccer_portugal_primeira_liga', name: 'Primeira Liga', flag: '🇵🇹' },
-  { code: 'soccer_turkey_super_league', name: 'Süper Lig', flag: '🇹🇷' }
+  { code: 'soccer_conmebol_copa_libertadores', name: 'Libertadores', flag: '🌎' }
 ];
 
 const getRandomKey = () => {
@@ -110,43 +79,41 @@ const getRandomKey = () => {
 
 function App() {
   const [matches, setMatches] = useState([]);
-  const [status, setStatus] = useState("SISTEMA ONLINE");
+  const [status, setStatus] = useState("SISTEMA LISTO");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
     setStatus("BUSCANDO MERCADOS...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey) throw new Error("Faltan Keys");
+      if (!apiKey || apiKey.includes("PEGA")) throw new Error("Faltan Keys");
 
-      // Pedimos 'spreads' (Hándicap)
+      // Pedimos 'spreads' para tener los hándicaps
       const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,spreads&oddsFormat=decimal`;
       const res = await fetch(url);
       const data = await res.json();
 
-      if (!Array.isArray(data)) throw new Error(data.message || "Error API (Posiblemente sin cuotas hoy)");
-
-      // FILTRO: Partidos desde la fecha seleccionada + 3 días
-      const start = new Date(selectedDate);
-      const end = new Date(selectedDate);
-      end.setDate(end.getDate() + 3);
+      if (!Array.isArray(data)) throw new Error(data.message || "Error API");
 
       const valid = data.filter((m: any) => {
           const mDate = new Date(m.commence_time);
+          const start = new Date(selectedDate);
+          const end = new Date(selectedDate);
+          end.setDate(end.getDate() + 3); // Ventana de 3 días
           return mDate >= start && mDate <= end;
       }).slice(0, 15);
 
       setMatches(valid);
       
       if (valid.length === 0) {
-          setStatus("SIN CUOTAS DISPONIBLES.");
+          setStatus("SIN CUOTAS.");
       } else {
           setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
       }
@@ -159,28 +126,40 @@ function App() {
   const generarPrompt = async (match: any) => {
     setAnalyzingId(match.id);
     try {
-      // 1. EXTRAER MEJOR HÁNDICAP
-      let spreadLine = "ND", spreadOdd = "ND", spreadTeam = "ND";
       let oddHome = 2.0, oddAway = 2.0; 
+      let spreadList: string[] = [];
 
+      // 1. Obtener Cuotas Base (Para ELO)
       const h2h = match.bookmakers[0]?.markets.find((m: any) => m.key === 'h2h');
       if (h2h) {
           oddHome = h2h.outcomes.find((o: any) => o.name === match.home_team)?.price || 2.0;
           oddAway = h2h.outcomes.find((o: any) => o.name === match.away_team)?.price || 2.0;
       }
 
-      for (const bookie of match.bookmakers) {
+      // 2. EXTRAER TODAS LAS LÍNEAS DE HÁNDICAP (SPREADS)
+      // Recorremos las casas de apuestas para encontrar variedad
+      match.bookmakers.forEach((bookie: any) => {
           const spreads = bookie.markets.find((m: any) => m.key === 'spreads');
           if (spreads) {
-              const outcome = spreads.outcomes[0]; 
-              spreadTeam = outcome.name;
-              spreadLine = outcome.point > 0 ? `+${outcome.point}` : `${outcome.point}`;
-              spreadOdd = outcome.price;
-              break; 
+              spreads.outcomes.forEach((outcome: any) => {
+                  // Filtramos para que no se repitan demasiado
+                  const line = outcome.point;
+                  const price = outcome.price;
+                  const team = outcome.name === match.home_team ? "Local" : "Visita";
+                  const formattedLine = `${team} [${line > 0 ? '+' : ''}${line}] @${price}`;
+                  
+                  // Solo agregamos si no existe ya y es relevante (cuotas entre 1.5 y 2.5)
+                  if (!spreadList.includes(formattedLine) && price > 1.5 && price < 3.0) {
+                      spreadList.push(formattedLine);
+                  }
+              });
           }
-      }
+      });
+      
+      // Limitamos a 6 líneas para no saturar a la IA
+      const finalSpreadText = spreadList.slice(0, 6).join("\n- ");
 
-      // 2. CÁLCULO PYTHON
+      // 3. CÁLCULO ELO (Backend)
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_handicap`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -188,8 +167,8 @@ function App() {
       });
       const data = await res.json();
       
-      // 3. PROMPT TÁCTICO GLOBAL
-      const prompt = `## 🎯 ROL: ESPECIALISTA EN HÁNDICAP ASIÁTICO (BetSmart AI)
+      // 4. PROMPT DE MENÚ DE OPCIONES
+      const prompt = `## 🎯 ROL: EXPERTO EN HÁNDICAP ASIÁTICO (BetSmart AI)
 
 ### 1. DATOS FINANCIEROS
 - **Bankroll:** $${bankroll}
@@ -198,35 +177,33 @@ function App() {
 ### 2. EL PARTIDO
 - **Evento:** ${match.home_team} vs ${match.away_team}
 - **Torneo:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
-- **Línea de Mercado:** **${spreadTeam} [ ${spreadLine} ] @ ${spreadOdd}**
 
-### 3. BASE MATEMÁTICA (ELO)
-- Diferencia Real: **${data.elo.diff_real} puntos**.
-- **Ventaja Esperada:** El Local debería ganar por **${data.math_prediction.expected_goal_diff} goles**.
-${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exótico)' : '(✅ ELO Oficial ClubElo)'}
+### 3. 🧠 ANÁLISIS MATEMÁTICO (ELO & MERCADO)
+- **Fuerza Local (ELO):** ${data.elo.home} pts.
+- **Fuerza Visita (ELO):** ${data.elo.away} pts.
+- **Fuente del Dato:** ${data.elo.source} (Si es 'MERCADO', se calculó basado en la cuota 1X2).
+- **VENTAJA ESPERADA:** La matemática dice que el favorito debería ganar por **${Math.abs(data.math_prediction.expected_goal_diff)} goles**.
+
+### 4. 📉 MENÚ DE HÁNDICAPS DISPONIBLES
+Aquí tienes las opciones que ofrece el mercado hoy. Elige la mejor:
+- ${finalSpreadText || "No hay líneas asiáticas disponibles, usa Hándicap Europeo o DNB."}
 
 ---
 
-### 🕵️‍♂️ TU MISIÓN: ANÁLISIS DE CONTEXTO ESPECÍFICO
-*Este partido puede ser Copa, Liga Europea o LatAm. Ajusta tu análisis:*
+### 🕵️‍♂️ TU MISIÓN TÁCTICA:
 
-#### A. FACTOR TORNEO (CRUCIAL):
-- **Si es Copa:** ¿El favorito rota plantilla? ¿El pequeño juega en casa (factor "Matagigantes")?
-- **Si es LatAm (Libertadores/Sudamericana):** ¿Hay factor **ALTURA** o viaje largo? ¿El local es muy fuerte en casa?
-- **Si es Europa:** ¿Hay diferencia abismal de nivel?
+1.  **COMPARACIÓN CRÍTICA:**
+    - Mi modelo dice ventaja de **${data.math_prediction.expected_goal_diff}** goles.
+    - Mira el "MENÚ DE HÁNDICAPS". ¿Hay alguna línea que sea fácil de cubrir según mi matemática?
+    - *Ejemplo: Si mi modelo dice ventaja de +2.5 goles y el mercado ofrece -1.5 @ 1.90, ¡HAY VALOR!*
 
-#### B. ANÁLISIS DE LÍNEA:
-- Si el hándicap es POSITIVO (+): ¿El equipo sabe defenderse y perder por poco?
-- Si el hándicap es NEGATIVO (-): ¿El favorito tiene su 11 de gala para golear?
+2.  **CONTEXTO DE COPA (Si aplica):**
+    - Si es Copa del Rey/FA Cup: ¿El favorito suele golear a equipos pequeños o gana por la mínima? Busca resultados previos.
 
-#### C. DATOS FINALES:
-1.  **H2H:** Resultados recientes entre ellos.
-2.  **Bajas:** Lesiones hoy.
-
-### 🏆 VEREDICTO FINAL
-- **¿Hay Valor?**
-- **Recomendación:** (Hándicap / DNB / Pasar)
-- **Stake:** (1-5)`;
+3.  **VEREDICTO FINAL:**
+    - **Mejor Línea:** (Elige una de la lista de arriba).
+    - **Stake:** (1-5).
+    - **Monto:** ($ Pesos).`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
@@ -243,23 +220,12 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const TeamLogo = ({ url, name }: any) => {
-    if (url) {
-        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
-    }
-    return (
-        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
-            {name.substring(0, 2).toUpperCase()}
-        </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-black text-gray-200 font-mono p-4">
       <div className="max-w-2xl mx-auto">
         <div className="border-b border-white/20 pb-4 mb-6 flex justify-between items-center">
-            <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">SNIPER</span></h1>
-            <span className="text-[10px] text-gray-500">v21 GLOBAL</span>
+            <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">PRO</span></h1>
+            <span className="text-[10px] text-gray-500">v22 MARKET-ELO</span>
         </div>
 
         <div className="bg-[#111] p-4 border border-white/10 rounded-lg mb-6">
@@ -270,13 +236,13 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">FECHA INICIO</label>
+                        <label className="text-[10px] text-gray-500 block mb-1">FECHA</label>
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                     </div>
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">COMPETICIÓN</label>
+                        <label className="text-[10px] text-gray-500 block mb-1">LIGA</label>
                         <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white">
-                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.flag} {l.name}</option>)}
+                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                         </select>
                     </div>
                 </div>
@@ -290,19 +256,19 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
         <div className="space-y-4">
             {matches.map((m: any) => (
                 <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-4 rounded-lg hover:border-emerald-500/50 transition">
-                    <div className="flex justify-between items-center text-sm font-bold text-white mb-1">
-                        <span className="flex-1">{m.home_team}</span>
-                        <span className="px-2 text-gray-600 text-xs">vs</span>
-                        <span className="flex-1 text-right">{m.away_team}</span>
+                    <div className="flex justify-between text-sm font-bold text-white mb-1">
+                        <span>{m.home_team}</span>
+                        <span className="text-gray-600">vs</span>
+                        <span>{m.away_team}</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mb-4 flex justify-between">
+                    <div className="text-[10px] text-gray-500 mb-4 flex items-center gap-2">
                          <span>{new Date(m.commence_time).toLocaleString()}</span>
-                         <span className="text-emerald-500 font-bold tracking-wider">HÁNDICAP</span>
+                         <span className="bg-emerald-900/30 text-emerald-400 px-2 rounded flex items-center gap-1"><ListFilter size={10}/> MÚLTIPLES LÍNEAS</span>
                     </div>
                     
                     {!generatedPrompts[m.id] ? (
                         <button onClick={() => generarPrompt(m)} className="w-full border border-dashed border-white/20 py-2 text-xs text-emerald-400 hover:bg-emerald-900/10 transition">
-                            {analyzingId === m.id ? "CALCULANDO..." : "ANALIZAR SPREAD"}
+                            {analyzingId === m.id ? "EXTRAYENDO LÍNEAS..." : "ANALIZAR MERCADO"}
                         </button>
                     ) : (
                         <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`w-full py-2 text-xs font-bold ${copiedId === m.id ? 'bg-emerald-600 text-white' : 'bg-white text-black'}`}>
