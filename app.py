@@ -1,37 +1,44 @@
 import os
-import json
 import requests
 import difflib
 import io
 import csv
-from flask import Flask, jsonify, request, Response
+from flask import Flask, Response
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# ==========================================
-# 🔐 CONFIGURACIÓN BÁSICA
-# ==========================================
-# Las keys se pasan por URL para seguridad
-# ==========================================
+# --- TU LLAVE YA INTEGRADA ---
+API_KEY = "734f30d0866696cf90d5029ac106cfba"
 
-# --- 1. FUNCIÓN PARA OBTENER NOMBRES DE CLUBELO ---
-def get_clubelo_names():
+# --- LIGAS A ESCANEAR ---
+LIGAS = [
+    "soccer_epl",               # Inglaterra
+    "soccer_spain_la_liga",     # España
+    "soccer_italy_serie_a",     # Italia
+    "soccer_germany_bundesliga",# Alemania
+    "soccer_france_ligue_one"   # Francia
+]
+
+def obtener_clubelo():
+    """Descarga la lista oficial de nombres"""
+    print("🌍 Descargando ClubElo...")
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         r = requests.get("http://api.clubelo.com/All", headers=headers, timeout=10)
         content = r.content.decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
-        # Extraemos solo los nombres, ordenados alfabéticamente
-        names = sorted([row['Club'] for row in reader])
+        # Guardamos solo nombres de equipos de nivel 1 (Primeras divisiones) para que sea mas rápido
+        # o quitamos el filtro si quieres todo.
+        names = [row['Club'] for row in reader] 
         return names
     except Exception as e:
-        return [f"Error ClubElo: {e}"]
+        return []
 
-# --- 2. FUNCIÓN PARA OBTENER NOMBRES DE ODDS API ---
-def get_odds_names(api_key, league):
-    url = f"https://api.the-odds-api.com/v4/sports/{league}/odds/?apiKey={api_key}&regions=eu&markets=h2h"
+def obtener_equipos_odds(league):
+    """Descarga los nombres como los tiene la casa de apuestas"""
+    url = f"https://api.the-odds-api.com/v4/sports/{league}/odds/?apiKey={API_KEY}&regions=eu&markets=h2h"
     try:
         res = requests.get(url)
         data = res.json()
@@ -41,79 +48,64 @@ def get_odds_names(api_key, league):
                 teams.add(m['home_team'])
                 teams.add(m['away_team'])
         return sorted(list(teams))
-    except Exception as e:
-        return [f"Error Odds API: {e}"]
+    except:
+        return []
 
-# --- 3. RUTA VISUAL (EL INSPECTOR) ---
-@app.route('/inspector', methods=['GET'])
-def inspector():
-    # Uso: /inspector?key=TU_API_KEY&league=soccer_epl
-    api_key = request.args.get('key')
-    league = request.args.get('league', 'soccer_epl')
+@app.route('/', methods=['GET'])
+def auditoria_total():
+    # 1. Cargar ClubElo
+    clubelo_names = obtener_clubelo()
     
-    if not api_key:
-        return "<h1>Error:</h1> <p>Falta tu API Key en la URL. Agrega ?key=TUS_NUMEROS</p>"
-
-    # 1. Obtener listas
-    odds_teams = get_odds_names(api_key, league)
-    clubelo_teams = get_clubelo_names()
-
-    # 2. Generar HTML simple
-    html = f"""
+    html = """
     <html>
     <head>
-        <title>Inspector de Nombres - {league}</title>
+        <title>Auditoría de Nombres</title>
         <style>
-            body {{ font-family: monospace; background: #111; color: #ddd; padding: 20px; }}
-            h1 {{ color: #10b981; }}
-            .container {{ display: flex; gap: 20px; }}
-            .col {{ flex: 1; border: 1px solid #333; padding: 10px; border-radius: 8px; background: #222; }}
-            h3 {{ border-bottom: 1px solid #555; padding-bottom: 5px; }}
-            div.item {{ padding: 2px 0; border-bottom: 1px solid #333; }}
-            div.item:hover {{ background: #333; color: #fff; }}
-            .search-box {{ position: sticky; top: 0; background: #111; padding: 10px; border-bottom: 1px solid #333; }}
+            body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { text-align: left; background: #222; padding: 10px; border-bottom: 2px solid #444; color: #aaa; }
+            td { padding: 10px; border-bottom: 1px solid #333; }
+            .match { color: #10b981; font-weight: bold; } /* Verde */
+            .mismatch { color: #ef4444; font-weight: bold; } /* Rojo */
+            .league-title { margin-top: 40px; color: #3b82f6; border-bottom: 1px solid #3b82f6; padding-bottom: 5px; }
         </style>
     </head>
     <body>
-        <h1>🕵️‍♂️ Inspector de Nombres: {league}</h1>
-        <p>Usa "Buscar en página" en tu navegador para encontrar equipos.</p>
-        
-        <div class="container">
-            <div class="col">
-                <h3>📡 ODDS API (Lo que llega)</h3>
-                <div id="odds-list">
-                    {''.join([f'<div class="item">{t}</div>' for t in odds_teams])}
-                </div>
-            </div>
-            
-            <div class="col">
-                <h3>🌍 CLUB ELO (Base de Datos Oficial)</h3>
-                <div id="elo-list">
-                    {''.join([f'<div class="item">{t}</div>' for t in clubelo_teams])}
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
+        <h1>🕵️‍♂️ Auditoría de Nombres de Equipos</h1>
+        <p>Comparando <b>The Odds API</b> vs <b>ClubElo (Oficial)</b></p>
     """
+
+    # 2. Recorrer Ligas
+    for liga in LIGAS:
+        html += f"<h2 class='league-title'>{liga.upper()}</h2>"
+        html += "<table><tr><th>Nombre en ODDS API</th><th>Mejor Coincidencia en CLUBELO</th><th>Estado</th></tr>"
+        
+        equipos_odds = obtener_equipos_odds(liga)
+        
+        if not equipos_odds:
+            html += "<tr><td colspan='3'>⚠️ No hay cuotas disponibles hoy para esta liga.</td></tr></table>"
+            continue
+
+        for team in equipos_odds:
+            # BUSCADOR DIFUSO
+            matches = difflib.get_close_matches(team, clubelo_names, n=1, cutoff=0.5)
+            
+            if matches:
+                found = matches[0]
+                # Si son idénticos o muy parecidos
+                if team == found:
+                    status = "<span class='match'>✅ EXACTO</span>"
+                else:
+                    status = "<span class='match'>⚠️ PARECIDO (OK)</span>"
+                
+                html += f"<tr><td>{team}</td><td>{found}</td><td>{status}</td></tr>"
+            else:
+                html += f"<tr><td>{team}</td><td>---</td><td><span class='mismatch'>❌ NO ENCONTRADO</span></td></tr>"
+        
+        html += "</table>"
+
+    html += "</body></html>"
     return Response(html, mimetype='text/html')
-
-# --- LÓGICA CORE (Para que la app siga funcionando) ---
-# ... (Aquí va el resto de la lógica de handicap que ya tenías, resumida) ...
-# Para este paso de inspección, no es vital que esté todo el código de handicap,
-# pero lo mantendré para que no se rompa tu app principal.
-
-elo_database = {} # (Se cargaría con load_elo en la app real)
-def load_elo_internal():
-    # Versión simplificada para mantener vivo el backend
-    pass
-
-@app.route('/', methods=['GET'])
-def home(): return "BACKEND ONLINE - Ve a /inspector para ver nombres", 200
-
-# (Mantener la ruta analizar_handicap aquí con el código que te di antes
-# para que la app principal siga funcionando)
-# ... [PEGAR AQUÍ LÓGICA DE ANALIZAR_HANDICAP SI QUIERES MANTENERLA ACTIVA] ...
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
