@@ -10,19 +10,30 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Base de datos en memoria (empieza vacía)
+# ==========================================
+# 🔐 CONFIGURACIÓN
+# ==========================================
+# Pega tu llave de API-FOOTBALL aquí para los logos
+API_FOOTBALL_KEY = "PEGA_TU_KEY_FOOTBALL_AQUI"
+# ==========================================
+
+HEADERS_FOOTBALL = {
+    'x-rapidapi-host': "v3.football.api-sports.io",
+    'x-rapidapi-key': API_FOOTBALL_KEY
+}
+
+# Base de datos en memoria
 elo_database = {}
 
 def load_elo():
     """Descarga ELO oficial. Se ejecuta SOLO cuando se necesita."""
     global elo_database
-    # Si ya tiene datos, no descargar de nuevo
-    if len(elo_database) > 0: return
+    if len(elo_database) > 0: return # Si ya tiene datos, no hacer nada
 
     print("🌍 Descargando Base de Datos ELO...")
     try:
+        # Timeout corto para no bloquear
         headers = {'User-Agent': 'Mozilla/5.0'}
-        # Timeout de 5 segundos para no congelar el servidor
         r = requests.get("http://api.clubelo.com/All", headers=headers, timeout=5)
         content = r.content.decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
@@ -31,7 +42,6 @@ def load_elo():
         print(f"✅ {len(elo_database)} equipos cargados.")
     except Exception as e:
         print(f"⚠️ Alerta ClubElo: {e}")
-        # Si falla, no pasa nada, usaremos el cálculo estimado
 
 def get_elo_from_odds(odd):
     if odd <= 1.01: return 2000
@@ -39,7 +49,7 @@ def get_elo_from_odds(odd):
     return 1500 + ((prob - 0.33) * 600)
 
 def find_elo(team, current_odd):
-    # Aseguramos que la base de datos esté cargada
+    # Carga diferida: Solo descarga si es la primera vez que se usa
     load_elo()
     
     correcciones = {
@@ -50,7 +60,6 @@ def find_elo(team, current_odd):
     }
     name = correcciones.get(team, team)
     
-    # Si la base de datos está vacía (falló descarga), usar estimado
     if not elo_database:
         return get_elo_from_odds(current_odd), True
 
@@ -66,7 +75,7 @@ def expected_margin(elo_diff):
 
 @app.route('/analizar_handicap', methods=['POST'])
 def analizar_handicap():
-    # Cargar datos si es la primera vez que se llama
+    # Asegura que haya datos antes de calcular
     load_elo()
     
     data = request.json
@@ -94,11 +103,10 @@ def analizar_handicap():
         }
     })
 
+# Ruta simple para que Render vea que estamos vivos
 @app.route('/', methods=['GET'])
 def home(): 
     return "HANDICAP ENGINE ONLINE", 200
 
 if __name__ == '__main__':
-    # Usamos el puerto que Render nos diga (Variable de entorno)
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=10000)
