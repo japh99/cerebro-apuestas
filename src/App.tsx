@@ -9,7 +9,8 @@ import {
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
 // 🔑 PEGA TUS 3 LLAVES AQUÍ
-const ODDS_API_KEYS = ["734f30d0866696cf90d5029ac106cfba",
+const ODDS_API_KEYS = [
+  "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
   "a9ff72549c4910f1fa9659e175a35cc0",
   "25e9d8872877f5110254ff6ef42056c6",
@@ -93,7 +94,7 @@ function App() {
     setStatus("BUSCANDO MERCADOS...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey || apiKey.includes("PEGA")) throw new Error("Faltan Keys");
+      if (!apiKey) throw new Error("Faltan Keys");
 
       // Pedimos 'spreads' para tener los hándicaps
       const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,spreads&oddsFormat=decimal`;
@@ -137,18 +138,15 @@ function App() {
       }
 
       // 2. EXTRAER TODAS LAS LÍNEAS DE HÁNDICAP (SPREADS)
-      // Recorremos las casas de apuestas para encontrar variedad
       match.bookmakers.forEach((bookie: any) => {
           const spreads = bookie.markets.find((m: any) => m.key === 'spreads');
           if (spreads) {
               spreads.outcomes.forEach((outcome: any) => {
-                  // Filtramos para que no se repitan demasiado
                   const line = outcome.point;
                   const price = outcome.price;
                   const team = outcome.name === match.home_team ? "Local" : "Visita";
                   const formattedLine = `${team} [${line > 0 ? '+' : ''}${line}] @${price}`;
                   
-                  // Solo agregamos si no existe ya y es relevante (cuotas entre 1.5 y 2.5)
                   if (!spreadList.includes(formattedLine) && price > 1.5 && price < 3.0) {
                       spreadList.push(formattedLine);
                   }
@@ -156,7 +154,7 @@ function App() {
           }
       });
       
-      // Limitamos a 6 líneas para no saturar a la IA
+      // Limitamos a 6 líneas
       const finalSpreadText = spreadList.slice(0, 6).join("\n- ");
 
       // 3. CÁLCULO ELO (Backend)
@@ -195,7 +193,6 @@ Aquí tienes las opciones que ofrece el mercado hoy. Elige la mejor:
 1.  **COMPARACIÓN CRÍTICA:**
     - Mi modelo dice ventaja de **${data.math_prediction.expected_goal_diff}** goles.
     - Mira el "MENÚ DE HÁNDICAPS". ¿Hay alguna línea que sea fácil de cubrir según mi matemática?
-    - *Ejemplo: Si mi modelo dice ventaja de +2.5 goles y el mercado ofrece -1.5 @ 1.90, ¡HAY VALOR!*
 
 2.  **CONTEXTO DE COPA (Si aplica):**
     - Si es Copa del Rey/FA Cup: ¿El favorito suele golear a equipos pequeños o gana por la mínima? Busca resultados previos.
@@ -220,6 +217,17 @@ Aquí tienes las opciones que ofrece el mercado hoy. Elige la mejor:
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const TeamLogo = ({ url, name }: any) => {
+    if (url) {
+        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
+    }
+    return (
+        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
+            {name.substring(0, 2).toUpperCase()}
+        </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-gray-200 font-mono p-4">
       <div className="max-w-2xl mx-auto">
@@ -236,7 +244,7 @@ Aquí tienes las opciones que ofrece el mercado hoy. Elige la mejor:
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">FECHA</label>
+                        <label className="text-[10px] text-gray-500 block mb-1">FECHA INICIO</label>
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                     </div>
                     <div>
