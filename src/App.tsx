@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  Activity, RefreshCw, Zap, Search, Copy, Check, 
-  Calendar, Globe, Wallet, BarChart2, 
-  ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle
-} from 'lucide-react';
+import { Activity, RefreshCw, Zap, Search, Copy, Check, TrendingUp, AlertTriangle, Layers } from 'lucide-react';
 
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
+
+// 🔑 PEGA TUS LLAVES AQUÍ
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -60,175 +58,194 @@ const ODDS_API_KEYS = [
 ];
 
 const LEAGUES = [
-  { code: 'soccer_epl', name: 'Premier League', flag: '🇬🇧' },
-  { code: 'soccer_spain_la_liga', name: 'La Liga', flag: '🇪🇸' },
-  { code: 'soccer_uefa_champs_league', name: 'Champions League', flag: '🏆' },
-  { code: 'soccer_italy_serie_a', name: 'Serie A', flag: '🇮🇹' },
-  { code: 'soccer_germany_bundesliga', name: 'Bundesliga', flag: '🇩🇪' },
-  { code: 'basketball_nba', name: 'NBA', flag: '🏀' }, // Ejemplo otro deporte
+  { code: 'soccer_epl', name: 'Premier League' },
+  { code: 'soccer_spain_la_liga', name: 'La Liga' },
+  { code: 'soccer_uefa_champs_league', name: 'Champions League' },
+  { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
+  { code: 'soccer_italy_serie_a', name: 'Serie A' },
+  { code: 'soccer_france_ligue_one', name: 'Ligue 1' }
 ];
 
-const getRandomKey = () => {
-    if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0) return null;
-    return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
-};
+const getRandomKey = () => ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 
 function App() {
   const [matches, setMatches] = useState([]);
-  const [status, setStatus] = useState("SISTEMA ONLINE");
+  const [status, setStatus] = useState("SISTEMA HÁNDICAP LISTO");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
 
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({});
-    setStatus("ESCANEO DE MERCADOS...");
+    setStatus("BUSCANDO LÍNEAS ASIÁTICAS...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey || apiKey.includes("PEGA")) throw new Error("Faltan Keys");
+      // Pedimos 'spreads' (Hándicap)
+      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,spreads&oddsFormat=decimal`;
+      const res = await fetch(url);
+      const data = await res.json();
 
-      // AGREGAMOS 'spreads' A LA URL
-      let url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,totals,btts,spreads&oddsFormat=decimal`;
-      
-      let res = await fetch(url);
-      let rawData = await res.json();
+      if (!Array.isArray(data)) throw new Error(data.message || "Error API");
 
-      if (!res.ok || rawData.message) throw new Error(rawData.message || "Error API");
+      // Filtro para partidos cercanos (48h)
+      const now = new Date();
+      const valid = data.filter((m: any) => {
+          const matchDate = new Date(m.commence_time);
+          const diffHours = (matchDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+          return diffHours > 0 && diffHours < 48; 
+      }).slice(0, 10);
 
-      const valid = rawData.filter(m => m.commence_time.startsWith(selectedDate)).slice(0, 10);
-      
-      if (valid.length === 0) {
-        setStatus("SIN EVENTOS PARA HOY.");
-        return;
-      }
-      
       setMatches(valid);
-      setStatus(`✅ ${valid.length} OPORTUNIDADES ENCONTRADAS`);
+      setStatus(`✅ ${valid.length} PARTIDOS CON LÍNEAS`);
 
-    } catch (e) {
+    } catch (e: any) {
       setStatus(`❌ ERROR: ${e.message}`);
     }
   };
 
-  const generarPrompt = async (match) => {
+  const generarPrompt = async (match: any) => {
     setAnalyzingId(match.id);
     try {
-      let oddHome = 0, oddDraw = 0, oddAway = 0;
-      let over25 = "ND", under25 = "ND", bttsYes = "ND";
-      // Variables nuevas para Handicap
-      let spreadHome = "ND", spreadHomeOdd = "ND";
-      let spreadAway = "ND", spreadAwayOdd = "ND";
+      // 1. EXTRAER MEJOR HÁNDICAP
+      let spreadLine = "ND", spreadOdd = "ND", spreadTeam = "ND";
+      let oddHome = 2.0, oddAway = 2.0; 
 
-      for (const bookie of match.bookmakers) {
-        // 1X2
-        const h2h = bookie.markets.find(m => m.key === 'h2h');
-        if (h2h && oddHome === 0) {
-            oddHome = h2h.outcomes.find(o => o.name === match.home_team)?.price;
-            oddAway = h2h.outcomes.find(o => o.name === match.away_team)?.price;
-            oddDraw = h2h.outcomes.find(o => o.name === 'Draw')?.price;
-        }
-        // Totals
-        const totals = bookie.markets.find(m => m.key === 'totals');
-        if (totals && over25 === "ND") {
-            over25 = totals.outcomes.find(o => o.name === 'Over' && o.point === 2.5)?.price || "ND";
-            under25 = totals.outcomes.find(o => o.name === 'Under' && o.point === 2.5)?.price || "ND";
-        }
-        // BTTS
-        const btts = bookie.markets.find(m => m.key === 'btts');
-        if (btts && bttsYes === "ND") {
-            bttsYes = btts.outcomes.find(o => o.name === 'Yes')?.price || "ND";
-        }
-        // SPREADS (HANDICAP)
-        const spreads = bookie.markets.find(m => m.key === 'spreads');
-        if (spreads && spreadHome === "ND") {
-            const h = spreads.outcomes.find(o => o.name === match.home_team);
-            const a = spreads.outcomes.find(o => o.name === match.away_team);
-            if (h) { spreadHome = h.point; spreadHomeOdd = h.price; }
-            if (a) { spreadAway = a.point; spreadAwayOdd = a.price; }
-        }
+      // Cuotas base
+      const h2h = match.bookmakers[0]?.markets.find((m: any) => m.key === 'h2h');
+      if (h2h) {
+          oddHome = h2h.outcomes.find((o: any) => o.name === match.home_team)?.price || 2.0;
+          oddAway = h2h.outcomes.find((o: any) => o.name === match.away_team)?.price || 2.0;
       }
 
-      // Backend Math
-      const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_completo`, {
+      // Buscar Spread Principal
+      for (const bookie of match.bookmakers) {
+          const spreads = bookie.markets.find((m: any) => m.key === 'spreads');
+          if (spreads) {
+              const outcome = spreads.outcomes[0]; 
+              spreadTeam = outcome.name;
+              spreadLine = outcome.point > 0 ? `+${outcome.point}` : `${outcome.point}`;
+              spreadOdd = outcome.price;
+              break; 
+          }
+      }
+
+      // 2. CÁLCULO PYTHON
+      const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_handicap`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          home_team: match.home_team,
-          away_team: match.away_team,
-          odd_home: oddHome || 2.0
-        })
+        body: JSON.stringify({ home_team: match.home_team, away_team: match.away_team, odd_home: oddHome, odd_away: oddAway })
       });
       const data = await res.json();
       
-      // PROMPT CON HÁNDICAP ASIÁTICO
-      const prompt = `## 🕵️‍♂️ ROL: ANALISTA DEPORTIVO (BetSmart AI)
+      // 3. PROMPT TÁCTICO DETALLADO (Tu Lista de Chequeo)
+      const prompt = `## 🎯 ROL: ESPECIALISTA EN HÁNDICAP ASIÁTICO (BetSmart AI)
 
-### 1. 🏦 GESTIÓN DE CAPITAL
-- **Bankroll:** $${bankroll} COP
-- **Stake 1/10:** $${(parseInt(bankroll)/70).toFixed(0)} COP
+### 1. DATOS FINANCIEROS
+- **Bankroll:** $${bankroll}
+- **Stake 1/10:** $${(parseInt(bankroll)/70).toFixed(0)}
 
-### 2. 📋 EVENTO
-- **Partido:** ${match.home_team} vs ${match.away_team}
-- **Liga:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
+### 2. EL PARTIDO
+- **Evento:** ${match.home_team} vs ${match.away_team} (${LEAGUES.find(l => l.code === selectedLeague)?.name})
+- **Línea de Mercado:** **${spreadTeam} [ ${spreadLine} ] @ ${spreadOdd}**
 
-### 3. 📊 MERCADO DE HÁNDICAPS (SPREADS)
-Aquí está la línea principal que ofrece el mercado hoy:
-- **${match.home_team}:** Hándicap [ ${spreadHome} ] @ ${spreadHomeOdd}
-- **${match.away_team}:** Hándicap [ ${spreadAway} ] @ ${spreadAwayOdd}
-*(Ej: -1.5 significa que debe ganar por 2 goles o más)*
+### 3. BASE MATEMÁTICA (ELO)
+- Diferencia Real: **${data.elo.diff_real} puntos**.
+- **Ventaja Esperada:** El Local debería ganar por **${data.math_prediction.expected_goal_diff} goles**.
+${data.elo.is_estimated ? '(⚠️ ELO Estimado)' : '(✅ ELO Oficial ClubElo)'}
 
-### 4. 📉 OTROS MERCADOS
-- **1X2:** 1[@${oddHome}] | X[@${oddDraw}] | 2[@${oddAway}]
-- **Goles (2.5):** Over[@${over25}] | Under[@${under25}]
+---
 
-### 5. 🧠 DATOS MATEMÁTICOS
-- **ELO:** ${data.elo.home} vs ${data.elo.away} (Dif: ${data.elo.home - data.elo.away})
-- **Stats:** Local ${data.stats.home.shots} tiros, Visita ${data.stats.away.shots} tiros.
+### 🕵️‍♂️ TU MISIÓN: ANÁLISIS CUALITATIVO PROFUNDO
+Usa tu capacidad de búsqueda para responder estas preguntas ANTES de decidir:
 
-### 🎯 TU MISIÓN:
-1.  **ANÁLISIS DE SPREAD:** ¿Es capaz el favorito de cubrir el hándicap ${spreadHome > 0 ? spreadAway : spreadHome}?
-2.  **VALOR:** Compara la dificultad del hándicap con la diferencia de ELO.
-3.  **VEREDICTO:** ¿Apostamos al Hándicap, al Ganador directo o pasamos?`;
+#### A. SI ANALIZAMOS UN HÁNDICAP POSITIVO (Underdog):
+1.  **Rendimiento reciente:** ¿Mantiene racha positiva o pierde por la mínima?
+2.  **Defensa:** ¿Suele perder por poca diferencia? (Clave para +1.5 o +1).
+3.  **H2H:** ¿Suele competir bien contra este rival?
+4.  **Localía:** ¿El underdog juega en casa? (Más valor).
+
+#### B. SI ANALIZAMOS UN HÁNDICAP NEGATIVO (Favorito):
+1.  **Capacidad goleadora:** ¿Gana por goleada o por la mínima?
+2.  **Motivación:** ¿Necesita diferencia de goles o va a rotar plantilla?
+3.  **Eficacia:** ¿Su xG ofensivo es alto?
+
+#### C. CONTEXTO GENERAL:
+1.  **Bajas Sensibles:** ¿Falta el portero o goleador?
+2.  **Dinámica:** ¿Cómo empiezan los partidos (rápido/lento)?
+3.  **Condiciones:** ¿Clima o estado del campo?
+
+### 🏆 VEREDICTO FINAL
+Compara mi "Ventaja Matemática" (${data.math_prediction.expected_goal_diff}) con la "Línea del Mercado" (${spreadLine}).
+
+- **¿Hay Valor?**
+- **Recomendación:** (Hándicap / DNB / Pasar)
+- **Stake:** (1-5)`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
     } catch (e) {
-      alert("Error");
+      alert("Error analizando");
     } finally {
       setAnalyzingId(null);
     }
   };
 
-  const copiar = (id, text) => {
+  const copiar = (id: any, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-gray-200 font-sans p-4">
-      {/* (Mismo diseño de Header y Dashboard que tenías antes...) */}
-      <div className="max-w-3xl mx-auto mt-10">
-        {matches.map(m => (
-            <div key={m.id} className="bg-[#111] p-4 rounded-xl border border-white/10 mb-4">
-                <h3 className="text-white font-bold">{m.home_team} vs {m.away_team}</h3>
-                <div className="mt-4">
+    <div className="min-h-screen bg-black text-gray-200 font-mono p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="border-b border-white/20 pb-4 mb-6 flex justify-between items-center">
+            <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">SNIPER</span></h1>
+        </div>
+
+        <div className="bg-[#111] p-4 border border-white/10 rounded-lg mb-6">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">CAPITAL</label>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
+                </div>
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">LIGA</label>
+                    <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white">
+                        {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                    </select>
+                </div>
+            </div>
+            <button onClick={escanear} className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition">
+                {status.includes("...") ? <RefreshCw className="animate-spin inline mr-2"/> : <Search className="inline mr-2"/>}
+                {status}
+            </button>
+        </div>
+
+        <div className="space-y-4">
+            {matches.map((m: any) => (
+                <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-4 rounded-lg hover:border-emerald-500/50 transition">
+                    <div className="flex justify-between text-sm font-bold text-white mb-4">
+                        <span>{m.home_team}</span>
+                        <span className="text-gray-600">vs</span>
+                        <span>{m.away_team}</span>
+                    </div>
+                    
                     {!generatedPrompts[m.id] ? (
-                        <button onClick={() => generarPrompt(m)} className="w-full bg-emerald-600 text-white py-2 rounded">
-                            ANALIZAR HÁNDICAP
+                        <button onClick={() => generarPrompt(m)} className="w-full border border-dashed border-white/20 py-2 text-xs text-emerald-400 hover:bg-emerald-900/10 transition">
+                            {analyzingId === m.id ? "CALCULANDO..." : "ANALIZAR SPREAD"}
                         </button>
                     ) : (
-                        <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className="w-full bg-white text-black py-2 rounded">
+                        <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`w-full py-2 text-xs font-bold ${copiedId === m.id ? 'bg-emerald-600 text-white' : 'bg-white text-black'}`}>
                             {copiedId === m.id ? "COPIADO" : "COPIAR ANÁLISIS"}
                         </button>
                     )}
                 </div>
-            </div>
-        ))}
+            ))}
+        </div>
       </div>
     </div>
   );
