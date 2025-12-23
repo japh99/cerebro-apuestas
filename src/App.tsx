@@ -1,4 +1,3 @@
-cat << 'EOF' > src/App.tsx
 import React, { useState } from 'react';
 import { 
   Activity, RefreshCw, Zap, Search, Copy, Check, 
@@ -139,7 +138,7 @@ function App() {
       const end = new Date(selectedDate);
       end.setDate(end.getDate() + 3);
 
-      const valid = data.filter((m) => {
+      const valid = data.filter((m: any) => {
           const mDate = new Date(m.commence_time);
           return mDate >= start && mDate <= end;
       }).slice(0, 15);
@@ -152,26 +151,26 @@ function App() {
           setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
       }
 
-    } catch (e) {
+    } catch (e: any) {
       setStatus(`❌ ERROR: ${e.message}`);
     }
   };
 
-  const generarPrompt = async (match) => {
+  const generarPrompt = async (match: any) => {
     setAnalyzingId(match.id);
     try {
       // 1. EXTRAER MEJOR HÁNDICAP
       let spreadLine = "ND", spreadOdd = "ND", spreadTeam = "ND";
       let oddHome = 2.0, oddAway = 2.0; 
 
-      const h2h = match.bookmakers[0]?.markets.find((m) => m.key === 'h2h');
+      const h2h = match.bookmakers[0]?.markets.find((m: any) => m.key === 'h2h');
       if (h2h) {
-          oddHome = h2h.outcomes.find((o) => o.name === match.home_team)?.price || 2.0;
-          oddAway = h2h.outcomes.find((o) => o.name === match.away_team)?.price || 2.0;
+          oddHome = h2h.outcomes.find((o: any) => o.name === match.home_team)?.price || 2.0;
+          oddAway = h2h.outcomes.find((o: any) => o.name === match.away_team)?.price || 2.0;
       }
 
       for (const bookie of match.bookmakers) {
-          const spreads = bookie.markets.find((m) => m.key === 'spreads');
+          const spreads = bookie.markets.find((m: any) => m.key === 'spreads');
           if (spreads) {
               const outcome = spreads.outcomes[0]; 
               spreadTeam = outcome.name;
@@ -238,10 +237,21 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
     }
   };
 
-  const copiar = (id, text) => {
+  const copiar = (id: any, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const TeamLogo = ({ url, name }: any) => {
+    if (url) {
+        return <img src={url} alt={name} className="w-10 h-10 object-contain drop-shadow-md" onError={(e) => e.currentTarget.style.display = 'none'} />;
+    }
+    return (
+        <div className="w-10 h-10 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-500">
+            {name.substring(0, 2).toUpperCase()}
+        </div>
+    );
   };
 
   return (
@@ -278,7 +288,7 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
         </div>
 
         <div className="space-y-4">
-            {matches.map((m) => (
+            {matches.map((m: any) => (
                 <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-4 rounded-lg hover:border-emerald-500/50 transition">
                     <div className="flex justify-between items-center text-sm font-bold text-white mb-1">
                         <span className="flex-1">{m.home_team}</span>
@@ -308,4 +318,3 @@ ${data.elo.is_estimated ? '(⚠️ ELO Estimado por cuota - Equipo pequeño/exó
 }
 
 export default App;
-EOF
