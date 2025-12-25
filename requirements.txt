@@ -1,10 +1,4 @@
 flask
 flask-cors
-scikit-learn
-joblib
-numpy
-pandas
 requests
 gunicorn
-xgboost
-google-generativeai
