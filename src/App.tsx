@@ -4,7 +4,7 @@ import {
   Calendar, Globe, Wallet, BarChart2, 
   ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
   Flame, History, Swords, TrendingUp, Layers, ListFilter, Pencil, MapPin,
-  Plus, X, Trash2, ChevronDown
+  Plus, X, Trash2, ChevronDown, Trophy, Home
 } from 'lucide-react';
 
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
@@ -63,88 +63,85 @@ const ODDS_API_KEYS = [
   "86de2f86b0b628024ef6d5546b479c0f"
 ];
 
-const LEAGUE_GROUPS = [
-  {
-    label: "🏆 TORNEOS TOP",
+// 🌍 CONFIGURACIÓN POR DEPORTE
+const SPORTS_CONFIG = {
+  soccer: {
+    name: "FÚTBOL",
+    icon: "⚽",
+    color: "emerald",
+    ratingName: "ELO",
+    metric: "Goles",
     leagues: [
       { code: 'soccer_uefa_champs_league', name: 'Champions League' },
-      { code: 'soccer_conmebol_copa_libertadores', name: 'Copa Libertadores' },
-      { code: 'soccer_conmebol_copa_sudamericana', name: 'Copa Sudamericana' }
-    ]
-  },
-  {
-    label: "🇬🇧 INGLATERRA",
-    leagues: [
       { code: 'soccer_epl', name: 'Premier League' },
-      { code: 'soccer_efl_champ', name: 'Championship' },
-      { code: 'soccer_england_efl_cup', name: 'EFL Cup' },
-      { code: 'soccer_fa_cup', name: 'FA Cup' }
-    ]
-  },
-  {
-    label: "🇪🇸 ESPAÑA",
-    leagues: [
       { code: 'soccer_spain_la_liga', name: 'La Liga' },
-      { code: 'soccer_spain_segunda_division', name: 'La Liga 2' },
-      { code: 'soccer_spain_copa_del_rey', name: 'Copa del Rey' }
-    ]
-  },
-  {
-    label: "🌎 AMÉRICA",
-    leagues: [
-      { code: 'soccer_brazil_campeonato', name: 'Brasileirão' },
-      { code: 'soccer_argentina_primera_division', name: 'Liga Argentina' },
-      { code: 'soccer_mexico_ligamx', name: 'Liga MX' },
-      { code: 'soccer_usa_mls', name: 'MLS' }
-    ]
-  },
-  {
-    label: "🇪🇺 EUROPA VARIOS",
-    leagues: [
+      { code: 'soccer_conmebol_copa_libertadores', name: 'Libertadores' },
       { code: 'soccer_italy_serie_a', name: 'Serie A' },
-      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
-      { code: 'soccer_france_ligue_one', name: 'Ligue 1' }
+      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' }
+    ]
+  },
+  nba: {
+    name: "BALONCESTO",
+    icon: "🏀",
+    color: "orange",
+    ratingName: "POWER RATING",
+    metric: "Puntos",
+    leagues: [
+      { code: 'basketball_nba', name: 'NBA' },
+      { code: 'basketball_euroleague', name: 'Euroliga' }
+    ]
+  },
+  mlb: {
+    name: "BÉISBOL",
+    icon: "⚾",
+    color: "blue",
+    ratingName: "TEAM RATING",
+    metric: "Carreras",
+    leagues: [
+      { code: 'baseball_mlb', name: 'MLB' } // (Nota: MLB no activa en Dic/Ene)
     ]
   }
-];
-
-const getRandomKey = () => {
-    if (!ODDS_API_KEYS || ODDS_API_KEYS.length === 0) return null;
-    return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 };
 
+const getRandomKey = () => ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
+
 function App() {
+  // --- NAVEGACIÓN ---
+  const [currentSport, setCurrentSport] = useState(null); // null = Home
+  
+  // --- ESTADOS DE LA APP ---
   const [matches, setMatches] = useState([]);
-  const [status, setStatus] = useState("SISTEMA LISTO");
+  const [status, setStatus] = useState("LISTO");
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   
-  const [elos, setElos] = useState({});
-  // Estructura nueva: { matchId: [ { team: 'HOME', line: '-0.25', odds: '1.90' } ] }
+  const [ratings, setRatings] = useState({});
   const [manualLines, setManualLines] = useState({}); 
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
-  const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
+  const [selectedLeague, setSelectedLeague] = useState('');
   const [bankroll, setBankroll] = useState("50000");
-  const [marketMode, setMarketMode] = useState('LATAM');
 
-  const getLeagueName = (code) => {
-    for (const group of LEAGUE_GROUPS) {
-      const found = group.leagues.find(l => l.code === code);
-      if (found) return found.name;
-    }
-    return code;
+  // Resetear al cambiar de deporte
+  const selectSport = (sportKey) => {
+    setCurrentSport(sportKey);
+    setMatches([]);
+    setGeneratedPrompts({});
+    setRatings({});
+    setManualLines({});
+    setSelectedLeague(SPORTS_CONFIG[sportKey].leagues[0].code);
+    setStatus(`MODO ${SPORTS_CONFIG[sportKey].name} ACTIVO`);
   };
 
-  const handleEloChange = (matchId, team, value) => {
-    setElos(prev => ({
+  const handleRatingChange = (matchId, team, value) => {
+    setRatings(prev => ({
         ...prev,
         [matchId]: { ...prev[matchId], [team]: value }
     }));
   };
 
-  // --- GESTIÓN DE LÍNEAS ESTRUCTURADAS ---
+  // Gestión de líneas dinámicas
   const handleAddLine = (matchId) => {
     setManualLines(prev => ({
         ...prev,
@@ -156,33 +153,26 @@ function App() {
     const currentLines = manualLines[matchId] || [];
     const newLines = [...currentLines];
     if (!newLines[index]) newLines[index] = { team: 'HOME', line: '', odds: '' };
-    
     newLines[index] = { ...newLines[index], [field]: value };
-    
-    setManualLines(prev => ({
-        ...prev,
-        [matchId]: newLines
-    }));
+    setManualLines(prev => ({ ...prev, [matchId]: newLines }));
   };
 
   const handleRemoveLine = (matchId, index) => {
     const currentLines = manualLines[matchId] || [];
     if (currentLines.length <= 1) return;
     const newLines = currentLines.filter((_, i) => i !== index);
-    setManualLines(prev => ({
-        ...prev,
-        [matchId]: newLines
-    }));
+    setManualLines(prev => ({ ...prev, [matchId]: newLines }));
   };
 
   const escanear = async () => {
-    setMatches([]); setGeneratedPrompts({}); setElos({}); setManualLines({});
-    setStatus("BUSCANDO PARTIDOS...");
+    setMatches([]); setGeneratedPrompts({});
+    setStatus("ESCANEO INICIADO...");
     try {
       const apiKey = getRandomKey();
-      if (!apiKey) throw new Error("Faltan Keys");
-
-      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h&oddsFormat=decimal`;
+      
+      // La URL depende del deporte (spreads para todos)
+      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
+      
       const res = await fetch(url);
       const data = await res.json();
 
@@ -196,7 +186,7 @@ function App() {
           return mDate >= start && mDate <= end;
       }).slice(0, 20);
 
-      // Inicializar una línea vacía por defecto
+      // Inicializar líneas vacías
       const initialLines = {};
       valid.forEach(m => {
           initialLines[m.id] = [{ team: 'HOME', line: '', odds: '' }];
@@ -205,11 +195,8 @@ function App() {
 
       setMatches(valid);
       
-      if (valid.length === 0) {
-          setStatus("SIN PARTIDOS.");
-      } else {
-          setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
-      }
+      if (valid.length === 0) setStatus("SIN PARTIDOS.");
+      else setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
 
     } catch (e: any) {
       setStatus(`❌ ERROR: ${e.message}`);
@@ -217,82 +204,90 @@ function App() {
   };
 
   const generarPrompt = async (match: any) => {
-    const eloHome = elos[match.id]?.home;
-    const eloAway = elos[match.id]?.away;
+    const rHome = ratings[match.id]?.home;
+    const rAway = ratings[match.id]?.away;
     const lines = manualLines[match.id] || [];
-    
-    // Filtrar líneas válidas (que tengan datos)
     const activeLines = lines.filter(l => l.line && l.odds);
+    
+    const config = SPORTS_CONFIG[currentSport];
 
-    if (!eloHome || !eloAway) {
-        alert("⚠️ ATENCIÓN: Ingresa los ELOs.");
-        return;
-    }
-    if (activeLines.length === 0) {
-        alert("⚠️ ATENCIÓN: Completa al menos una línea de apuesta.");
-        return;
-    }
+    if (!rHome || !rAway) { alert(`⚠️ Faltan los ${config.ratingName}.`); return; }
+    if (activeLines.length === 0) { alert("⚠️ Faltan líneas de apuesta."); return; }
 
     setAnalyzingId(match.id);
     try {
-      // 1. CÁLCULO MATEMÁTICO
+      // Enviar tipo de deporte al backend para usar la fórmula correcta
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_manual`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ elo_home: eloHome, elo_away: eloAway })
+        body: JSON.stringify({ 
+            elo_home: rHome, 
+            elo_away: rAway,
+            sport: currentSport // 'soccer', 'nba' o 'mlb'
+        })
       });
       const data = await res.json();
       
-      const regionContext = marketMode === 'LATAM' 
-        ? "MODO LATAM: Líneas agresivas (1.5, 2.5). Buscamos valor alto." 
-        : "MODO EUROPA: Líneas asiáticas (0.25, 0.75). Gestión conservadora.";
-
-      // Formatear lista de líneas para el prompt
       const linesFormatted = activeLines.map((l, i) => {
           const teamName = l.team === 'HOME' ? match.home_team : match.away_team;
           return `- Opción ${i + 1}: **${teamName}** [ ${l.line} ] @ ${l.odds}`;
       }).join("\n");
 
-      // 2. PROMPT MULTI-OPCIÓN
-      const prompt = `## 🎯 ROL: GESTOR DE INVERSIONES (BetSmart AI)
+      // --- CONTEXTO ESPECÍFICO POR DEPORTE ---
+      let sportInstructions = "";
+      if (currentSport === 'soccer') {
+          sportInstructions = `
+          - **H2H:** Busca historial reciente.
+          - **Lesiones:** ¿Falta el goleador?
+          - **Contexto:** ¿Es Copa o Liga?`;
+      } else if (currentSport === 'nba') {
+          sportInstructions = `
+          - **FATIGA (Clave):** ¿Es Back-to-Back? ¿3er juego en 4 noches?
+          - **ESTRELLAS:** Busca "NBA Injury Report Today". ¿Juegan los titulares?
+          - **MATCHUP:** ¿Cómo defiende el local al mejor jugador rival?`;
+      } else if (currentSport === 'mlb') {
+          sportInstructions = `
+          - **PITCHERS:** Busca "Starting Pitchers today". Compara su ERA y WHIP.
+          - **BULLPEN:** ¿Están descansados los relevistas?
+          - **CLIMA:** ¿Viento a favor de Home Run?`;
+      }
 
-### 1. ⚙️ CONFIGURACIÓN
-- **Capital:** $${bankroll} COP
+      const prompt = `## 🎯 ROL: GESTOR DE INVERSIONES ${config.name} (BetSmart AI)
+
+### 1. ⚙️ CAPITAL
+- **Bankroll:** $${bankroll} COP
 - **Stake Base:** $${(parseInt(bankroll)/70).toFixed(0)} COP
-- **Enfoque:** ${regionContext}
 
 ### 2. 📋 EL EVENTO
+- **Deporte:** ${config.name}
 - **Partido:** ${match.home_team} vs ${match.away_team}
-- **Liga:** ${getLeagueName(selectedLeague)}
+- **Competición:** ${config.leagues.find(l => l.code === selectedLeague)?.name}
 - **Fecha:** ${new Date(match.commence_time).toLocaleString()}
 
-### 3. 🧠 LA VERDAD MATEMÁTICA (ELO REAL)
-- **ELO Local:** ${eloHome} | **ELO Visita:** ${eloAway}
-- **Diferencia Ajustada:** ${data.math.elo_diff_adjusted} puntos.
-- **PROYECCIÓN:** El modelo estima que el **${data.math.favorito}** debería ganar por un margen de **${Math.abs(data.math.expected_goals_diff)} goles**.
+### 3. 🧠 ANÁLISIS MATEMÁTICO (${config.ratingName})
+- **${config.ratingName} Local:** ${rHome} | **Visita:** ${rAway}
+- **Diferencia Ajustada:** ${data.math.elo_diff_adjusted} pts.
+- **PROYECCIÓN:** El modelo estima que el **${data.math.favorito}** debería ganar por un margen de **${Math.abs(data.math.expected_margin)} ${data.math.unit}**.
 
-### 4. 📉 LÍNEAS DE MERCADO (CARTERA DE OPCIONES)
-El usuario ha seleccionado estas líneas manualmente de su casa de apuestas:
+### 4. 📉 LÍNEAS DE MERCADO
 ${linesFormatted}
 
 ---
 
 ### 🕵️‍♂️ TU MISIÓN TÁCTICA (BUSCAR EN INTERNET):
 
-1.  **ANÁLISIS COMPARATIVO:**
-    - Cruza mi ventaja matemática (${data.math.expected_goals_diff} goles) con las Opciones.
-    - ¿Cuál cubre mejor el riesgo?
+1.  **ANÁLISIS MATEMÁTICO:**
+    - Cruza mi ventaja matemática (${data.math.expected_margin} ${data.math.unit}) con las Opciones.
+    - ¿Cuál línea tiene valor?
 
-2.  **CONTEXTO DEPORTIVO (Investiga):** 
-    - **H2H:** Historial reciente.
-    - **Lesiones:** Bajas clave HOY.
-    - **Motivación:** ¿Quién necesita más los puntos?
+2.  **INVESTIGACIÓN OBLIGATORIA (Browsing):**
+    ${sportInstructions}
 
 3.  **VEREDICTO FINAL:** 
-    - **Mejor Línea:** (Elige UNA de la lista).
+    - **Mejor Línea:** (Elige UNA).
     - **Stake:** (1-5).
     - **Monto:** ($ Pesos).
-    - **Razón:** (Por qué esta línea y no las otras).`;
+    - **Razón:** (Matemática + Contexto).`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
@@ -309,46 +304,67 @@ ${linesFormatted}
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // --- VISTA: SELECCIÓN DE DEPORTE ---
+  if (!currentSport) {
+      return (
+          <div className="min-h-screen bg-black text-white p-6 flex flex-col items-center justify-center font-mono">
+              <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
+                  <Shield size={40} className="text-emerald-500"/> Capital<span className="text-emerald-500">Shield</span>
+              </h1>
+              <p className="text-slate-500 mb-10 tracking-widest text-xs uppercase">Multi-Sport Arbitrage & Value System</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+                  {Object.entries(SPORTS_CONFIG).map(([key, conf]) => (
+                      <button 
+                          key={key}
+                          onClick={() => selectSport(key)}
+                          className={`group relative p-8 rounded-2xl border border-white/10 bg-[#111] hover:bg-[#151515] transition-all hover:-translate-y-2 hover:shadow-2xl hover:shadow-${conf.color}-500/20`}
+                      >
+                          <div className={`text-6xl mb-4 grayscale group-hover:grayscale-0 transition-all`}>{conf.icon}</div>
+                          <h2 className="text-2xl font-bold mb-2">{conf.name}</h2>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider">Motor {conf.ratingName}</p>
+                          <div className={`absolute bottom-0 left-0 w-full h-1 bg-${conf.color}-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300`}></div>
+                      </button>
+                  ))}
+              </div>
+          </div>
+      );
+  }
+
+  // --- VISTA: DASHBOARD DEPORTE ---
+  const config = SPORTS_CONFIG[currentSport];
+
   return (
     <div className="min-h-screen bg-black text-gray-200 font-mono p-4">
       <div className="max-w-2xl mx-auto">
         
-        {/* HEADER & MARKET SWITCH */}
-        <div className="flex justify-between items-center mb-6 border-b border-white/20 pb-4">
-            <div>
-                <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">CONTROL</span></h1>
-                <span className="text-[10px] text-gray-500">v34 STRUCTURED</span>
+        {/* HEADER */}
+        <div className="border-b border-white/20 pb-4 mb-6 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setCurrentSport(null)} className="bg-[#222] p-2 rounded hover:bg-[#333]"><ChevronRight className="rotate-180" size={16}/></button>
+                <h1 className="text-xl font-bold tracking-widest text-white">{config.name}<span className={`text-${config.color}-500`}>PRO</span></h1>
             </div>
-            <div className="flex bg-[#111] rounded-lg p-1 border border-white/10">
-                <button onClick={() => setMarketMode('LATAM')} className={`px-3 py-1 rounded text-[10px] font-bold ${marketMode === 'LATAM' ? 'bg-emerald-600 text-white' : 'text-gray-500'}`}>LATAM</button>
-                <button onClick={() => setMarketMode('EUROPA')} className={`px-3 py-1 rounded text-[10px] font-bold ${marketMode === 'EUROPA' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>EURO</button>
-            </div>
+            <span className="text-[10px] text-gray-500">MÓDULO ACTIVO</span>
         </div>
 
         {/* CONTROLES */}
         <div className="bg-[#111] p-4 border border-white/10 rounded-lg mb-6">
             <div className="grid grid-cols-1 gap-4 mb-4">
-                <div>
-                    <label className="text-[10px] text-gray-500 block mb-1">CAPITAL</label>
-                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
-                </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="text-[10px] text-gray-500 block mb-1">FECHA</label>
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                     </div>
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">LIGA</label>
+                        <label className="text-[10px] text-gray-500 block mb-1">COMPETICIÓN</label>
                         <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white cursor-pointer">
-                            {LEAGUE_GROUPS.map((group, idx) => (
-                                <optgroup key={idx} label={group.label}>
-                                    {group.leagues.map(l => (
-                                        <option key={l.code} value={l.code}>{l.name}</option>
-                                    ))}
-                                </optgroup>
-                            ))}
+                            {config.leagues.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                         </select>
                     </div>
+                </div>
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">CAPITAL (COP)</label>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                 </div>
             </div>
             <button onClick={escanear} className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition">
@@ -360,7 +376,7 @@ ${linesFormatted}
         {/* LISTA DE PARTIDOS */}
         <div className="space-y-4">
             {matches.map((m: any) => (
-                <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-5 rounded-lg hover:border-emerald-500/50 transition relative">
+                <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-5 rounded-lg hover:border-white/30 transition relative">
                     
                     <div className="flex justify-between items-center text-sm font-bold text-white mb-2">
                         <span className="flex-1">{m.home_team}</span>
@@ -374,77 +390,73 @@ ${linesFormatted}
                     
                     {!generatedPrompts[m.id] ? (
                         <div className="space-y-4">
-                            {/* ELO */}
+                            {/* INPUTS DE RATING (Diferente nombre según deporte) */}
                             <div className="flex gap-2">
-                                <input type="number" placeholder="ELO Local" onChange={(e) => handleEloChange(m.id, 'home', e.target.value)} className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-emerald-500"/>
-                                <input type="number" placeholder="ELO Visita" onChange={(e) => handleEloChange(m.id, 'away', e.target.value)} className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-emerald-500"/>
+                                <input 
+                                    type="number" placeholder={`${config.ratingName} Local`} 
+                                    onChange={(e) => handleRatingChange(m.id, 'home', e.target.value)}
+                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-white"
+                                />
+                                <input 
+                                    type="number" placeholder={`${config.ratingName} Visita`} 
+                                    onChange={(e) => handleRatingChange(m.id, 'away', e.target.value)}
+                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-white"
+                                />
                             </div>
 
-                            {/* LÍNEAS DINÁMICAS (FORMULARIO) */}
+                            {/* LÍNEAS DINÁMICAS */}
                             <div className="bg-[#111] p-3 rounded border border-white/5">
                                 <label className="text-[9px] text-gray-500 block mb-2 font-bold uppercase flex justify-between items-center">
-                                    <span>CARTERA DE APUESTAS</span>
-                                    <span className="text-[8px] bg-white/10 px-1 rounded">MÁXIMO CONTROL</span>
+                                    <span>LÍNEAS DE APUESTA</span>
                                 </label>
-                                
                                 <div className="space-y-2">
-                                    {(manualLines[m.id] || []).map((line, idx) => (
+                                    {(manualLines[m.id] || []).map((line: any, idx: number) => (
                                         <div key={idx} className="flex gap-2 items-center">
-                                            {/* Selector de Equipo */}
                                             <div className="relative w-1/3">
                                                 <select 
                                                     value={line.team} 
                                                     onChange={(e) => handleLineDataChange(m.id, idx, 'team', e.target.value)}
-                                                    className="w-full bg-black border border-white/20 p-2 text-[10px] text-white rounded appearance-none outline-none focus:border-indigo-500"
+                                                    className="w-full bg-black border border-white/20 p-2 text-[10px] text-white rounded appearance-none outline-none"
                                                 >
                                                     <option value="HOME">{m.home_team}</option>
                                                     <option value="AWAY">{m.away_team}</option>
                                                 </select>
                                                 <ChevronDown size={10} className="absolute right-2 top-3 text-gray-500 pointer-events-none"/>
                                             </div>
-
-                                            {/* Input Hándicap */}
                                             <input 
-                                                type="text" 
-                                                placeholder="Línea (Ej: -0.25)"
+                                                type="text" placeholder="Línea (Ej: -5.5)"
                                                 value={line.line}
                                                 onChange={(e) => handleLineDataChange(m.id, idx, 'line', e.target.value)}
-                                                className="w-1/3 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none focus:border-indigo-500"
+                                                className="w-1/3 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none"
                                             />
-
-                                            {/* Input Cuota */}
                                             <input 
-                                                type="number" 
-                                                placeholder="Cuota (Ej: 1.90)"
+                                                type="number" placeholder="Cuota"
                                                 value={line.odds}
                                                 onChange={(e) => handleLineDataChange(m.id, idx, 'odds', e.target.value)}
-                                                className="w-1/4 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none focus:border-emerald-500"
+                                                className="w-1/4 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none"
                                             />
-
-                                            {/* Botón Borrar */}
                                             <button onClick={() => handleRemoveLine(m.id, idx)} className="text-red-500 hover:bg-red-900/20 p-2 rounded">
                                                 <Trash2 size={12}/>
                                             </button>
                                         </div>
                                     ))}
                                 </div>
-                                
                                 <button onClick={() => handleAddLine(m.id)} className="mt-3 w-full py-1.5 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded text-[10px] text-gray-400 flex items-center justify-center gap-1 transition">
-                                    <Plus size={10}/> AGREGAR OTRA OPCIÓN
+                                    <Plus size={10}/> AGREGAR LÍNEA
                                 </button>
                             </div>
 
                             <button onClick={() => generarPrompt(m)} className="w-full border border-dashed border-white/20 py-3 text-xs text-emerald-400 hover:bg-emerald-900/10 transition flex items-center justify-center gap-2">
-                                <Pencil size={12}/> PROCESAR ESTRATEGIA
+                                <Pencil size={12}/> PROCESAR
                             </button>
                         </div>
                     ) : (
                         <div className="animate-in fade-in">
                             <div className="mb-2 p-2 bg-emerald-900/20 rounded border border-emerald-500/20 text-center">
-                                <p className="text-[10px] text-emerald-400 font-bold">PROMPT CREADO ({marketMode})</p>
+                                <p className="text-[10px] text-emerald-400 font-bold">ANÁLISIS LISTO</p>
                             </div>
                             <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`w-full py-3 text-xs font-bold rounded ${copiedId === m.id ? 'bg-emerald-600 text-white' : 'bg-white text-black'}`}>
-                                {copiedId === m.id ? "COPIADO" : "COPIAR ANÁLISIS"}
+                                {copiedId === m.id ? "COPIADO" : "COPIAR AL CHAT"}
                             </button>
                         </div>
                     )}
