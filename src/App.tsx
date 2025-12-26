@@ -8,7 +8,7 @@ import {
 
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
-// 🔑 PEGA TUS 3 LLAVES AQUÍ
+// 🔑 TUS LLAVES (Odds API)
 const ODDS_API_KEYS = [
   "734f30d0866696cf90d5029ac106cfba",
   "10fb6d9d7b3240906d0acea646068535",
@@ -62,69 +62,75 @@ const ODDS_API_KEYS = [
   "86de2f86b0b628024ef6d5546b479c0f"
 ];
 
-// 🌍 LISTA COMPLETA DE LIGAS (Basada en tu lista oficial)
-const LEAGUES = [
-  // --- 🏆 INTERNACIONAL ---
-  { code: 'soccer_uefa_champs_league', name: '🇪🇺 UEFA Champions League' },
-  { code: 'soccer_uefa_champs_league_qualification', name: '🇪🇺 Champions League (Qual)' },
-  { code: 'soccer_conmebol_copa_libertadores', name: '🌎 Copa Libertadores' },
-  { code: 'soccer_conmebol_copa_sudamericana', name: '🌎 Copa Sudamericana' },
-  { code: 'soccer_fifa_world_cup_winner', name: '🌍 Mundial (Ganador)' },
-
-  // --- 🇬🇧 INGLATERRA ---
-  { code: 'soccer_epl', name: '🇬🇧 Premier League' },
-  { code: 'soccer_efl_champ', name: '🇬🇧 Championship' },
-  { code: 'soccer_england_league1', name: '🇬🇧 League 1' },
-  { code: 'soccer_england_league2', name: '🇬🇧 League 2' },
-  { code: 'soccer_england_efl_cup', name: '🇬🇧 EFL Cup' },
-
-  // --- 🇪🇸 ESPAÑA ---
-  { code: 'soccer_spain_la_liga', name: '🇪🇸 La Liga' },
-  { code: 'soccer_spain_segunda_division', name: '🇪🇸 La Liga 2' },
-
-  // --- 🇮🇹 ITALIA ---
-  { code: 'soccer_italy_serie_a', name: '🇮🇹 Serie A' },
-  { code: 'soccer_italy_serie_b', name: '🇮🇹 Serie B' },
-
-  // --- 🇩🇪 ALEMANIA ---
-  { code: 'soccer_germany_bundesliga', name: '🇩🇪 Bundesliga' },
-  { code: 'soccer_germany_bundesliga2', name: '🇩🇪 Bundesliga 2' },
-  { code: 'soccer_germany_liga3', name: '🇩🇪 3. Liga' },
-
-  // --- 🇫🇷 FRANCIA ---
-  { code: 'soccer_france_ligue_one', name: '🇫🇷 Ligue 1' },
-  { code: 'soccer_france_ligue_two', name: '🇫🇷 Ligue 2' },
-
-  // --- 🌎 AMÉRICA ---
-  { code: 'soccer_brazil_campeonato', name: '🇧🇷 Brasileirão A' },
-  { code: 'soccer_brazil_serie_b', name: '🇧🇷 Brasileirão B' },
-  { code: 'soccer_argentina_primera_division', name: '🇦🇷 Liga Profesional' },
-  { code: 'soccer_usa_mls', name: '🇺🇸 MLS' },
-  { code: 'soccer_mexico_ligamx', name: '🇲🇽 Liga MX' },
-  { code: 'soccer_chile_campeonato', name: '🇨🇱 Primera División Chile' },
-  { code: 'soccer_concacaf_leagues_cup', name: '🌎 Leagues Cup' },
-
-  // --- 🇪🇺 RESTO DE EUROPA ---
-  { code: 'soccer_portugal_primeira_liga', name: '🇵🇹 Primeira Liga' },
-  { code: 'soccer_netherlands_eredivisie', name: '🇳🇱 Eredivisie' },
-  { code: 'soccer_turkey_super_league', name: '🇹🇷 Süper Lig' },
-  { code: 'soccer_belgium_first_div', name: '🇧🇪 Pro League' },
-  { code: 'soccer_scotland_premiership', name: '🏴󠁧󠁢󠁳󠁣󠁴󠁿 Premiership' }, // soccer_spl
-  { code: 'soccer_austria_bundesliga', name: '🇦🇹 Austria Bundesliga' },
-  { code: 'soccer_denmark_superliga', name: '🇩🇰 Superliga' },
-  { code: 'soccer_norway_eliteserien', name: '🇳🇴 Eliteserien' },
-  { code: 'soccer_sweden_allsvenskan', name: '🇸🇪 Allsvenskan' },
-  { code: 'soccer_sweden_superettan', name: '🇸🇪 Superettan' },
-  { code: 'soccer_switzerland_superleague', name: '🇨🇭 Super League' },
-  { code: 'soccer_greece_super_league', name: '🇬🇷 Super League' },
-  { code: 'soccer_poland_ekstraklasa', name: '🇵🇱 Ekstraklasa' },
-  { code: 'soccer_finland_veikkausliiga', name: '🇫🇮 Veikkausliiga' },
-  { code: 'soccer_league_of_ireland', name: '🇮🇪 League of Ireland' },
-
-  // --- 🌏 ASIA ---
-  { code: 'soccer_japan_j_league', name: '🇯🇵 J League' },
-  { code: 'soccer_korea_kleague1', name: '🇰🇷 K League 1' },
-  { code: 'soccer_china_superleague', name: '🇨🇳 Super League' }
+// 🌍 ORGANIZACIÓN POR GRUPOS
+const LEAGUE_GROUPS = [
+  {
+    label: "🏆 INTERNACIONAL",
+    leagues: [
+      { code: 'soccer_uefa_champs_league', name: 'Champions League' },
+      { code: 'soccer_uefa_europa_league', name: 'Europa League' },
+      { code: 'soccer_uefa_europa_conference_league', name: 'Conference League' },
+      { code: 'soccer_conmebol_copa_libertadores', name: 'Copa Libertadores' },
+      { code: 'soccer_conmebol_copa_sudamericana', name: 'Copa Sudamericana' }
+    ]
+  },
+  {
+    label: "🇬🇧 INGLATERRA",
+    leagues: [
+      { code: 'soccer_epl', name: 'Premier League' },
+      { code: 'soccer_efl_champ', name: 'Championship' },
+      { code: 'soccer_england_efl_cup', name: 'EFL Cup' },
+      { code: 'soccer_fa_cup', name: 'FA Cup' }
+    ]
+  },
+  {
+    label: "🇪🇸 ESPAÑA",
+    leagues: [
+      { code: 'soccer_spain_la_liga', name: 'La Liga' },
+      { code: 'soccer_spain_segunda_division', name: 'La Liga 2' },
+      { code: 'soccer_spain_copa_del_rey', name: 'Copa del Rey' }
+    ]
+  },
+  {
+    label: "🇮🇹 ITALIA",
+    leagues: [
+      { code: 'soccer_italy_serie_a', name: 'Serie A' },
+      { code: 'soccer_italy_serie_b', name: 'Serie B' },
+      { code: 'soccer_italy_coppa_italia', name: 'Coppa Italia' }
+    ]
+  },
+  {
+    label: "🇩🇪 ALEMANIA",
+    leagues: [
+      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
+      { code: 'soccer_germany_dfb_pokal', name: 'DFB Pokal' }
+    ]
+  },
+  {
+    label: "🇫🇷 FRANCIA",
+    leagues: [
+      { code: 'soccer_france_ligue_one', name: 'Ligue 1' }
+    ]
+  },
+  {
+    label: "🌎 AMÉRICA",
+    leagues: [
+      { code: 'soccer_brazil_campeonato', name: 'Brasileirão A' },
+      { code: 'soccer_argentina_primera_division', name: 'Argentina Liga Pro' },
+      { code: 'soccer_mexico_ligamx', name: 'Liga MX' },
+      { code: 'soccer_usa_mls', name: 'MLS' },
+      { code: 'soccer_chile_campeonato', name: 'Chile Primera' }
+    ]
+  },
+  {
+    label: "🇪🇺 OTRAS",
+    leagues: [
+      { code: 'soccer_portugal_primeira_liga', name: 'Portugal' },
+      { code: 'soccer_netherlands_eredivisie', name: 'Holanda' },
+      { code: 'soccer_turkey_super_league', name: 'Turquía' },
+      { code: 'soccer_belgium_first_div', name: 'Bélgica' }
+    ]
+  }
 ];
 
 const getRandomKey = () => {
@@ -138,11 +144,20 @@ function App() {
   const [analyzingId, setAnalyzingId] = useState(null);
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
-  const [elos, setElos] = useState({}); // Estado para ELOs manuales
+  const [elos, setElos] = useState({});
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
   const [selectedLeague, setSelectedLeague] = useState('soccer_epl');
   const [bankroll, setBankroll] = useState("50000");
+
+  // Obtener nombre bonito de la liga
+  const getLeagueName = (code) => {
+    for (const group of LEAGUE_GROUPS) {
+      const found = group.leagues.find(l => l.code === code);
+      if (found) return found.name;
+    }
+    return code;
+  };
 
   const handleEloChange = (matchId, team, value) => {
     setElos(prev => ({
@@ -153,13 +168,12 @@ function App() {
 
   const escanear = async () => {
     setMatches([]); setGeneratedPrompts({}); setElos({});
-    setStatus("BUSCANDO LÍNEAS DE HÁNDICAP...");
+    setStatus("BUSCANDO HÁNDICAPS...");
     try {
       const apiKey = getRandomKey();
       if (!apiKey) throw new Error("Faltan Keys");
 
-      // Pedimos 'spreads' (Hándicap Asiático)
-      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=spreads,h2h&oddsFormat=decimal`;
+      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu&markets=h2h,spreads&oddsFormat=decimal`;
       const res = await fetch(url);
       const data = await res.json();
 
@@ -171,7 +185,7 @@ function App() {
           const end = new Date(selectedDate);
           end.setDate(end.getDate() + 3); 
           return mDate >= start && mDate <= end;
-      }).slice(0, 15);
+      }).slice(0, 20);
 
       setMatches(valid);
       
@@ -187,20 +201,28 @@ function App() {
   };
 
   const generarPrompt = async (match: any) => {
-    // Validación de ELO manual
     const eloHome = elos[match.id]?.home;
     const eloAway = elos[match.id]?.away;
 
     if (!eloHome || !eloAway) {
-        alert("⚠️ ATENCIÓN: Debes ingresar el ELO de ambos equipos para calcular la ventaja real.");
+        alert("⚠️ FALTA ELO: Ingresa los puntos ELO de ambos equipos para calcular la ventaja real.");
         return;
     }
 
     setAnalyzingId(match.id);
     try {
       let spreadList: string[] = [];
+      let oddHome = "ND", oddAway = "ND", oddDraw = "ND";
 
-      // 1. EXTRAER TODOS LOS HÁNDICAPS DISPONIBLES
+      // 1. Obtener 1X2
+      const h2h = match.bookmakers[0]?.markets.find((m: any) => m.key === 'h2h');
+      if (h2h) {
+          oddHome = h2h.outcomes.find((o: any) => o.name === match.home_team)?.price;
+          oddAway = h2h.outcomes.find((o: any) => o.name === match.away_team)?.price;
+          oddDraw = h2h.outcomes.find((o: any) => o.name === 'Draw')?.price;
+      }
+
+      // 2. Extraer Spreads
       match.bookmakers.forEach((bookie: any) => {
           const spreads = bookie.markets.find((m: any) => m.key === 'spreads');
           if (spreads) {
@@ -208,7 +230,6 @@ function App() {
                   const line = outcome.point;
                   const price = outcome.price;
                   const team = outcome.name === match.home_team ? "Local" : "Visita";
-                  // Formato limpio: Local [-1.5] @ 1.90
                   const formattedLine = `• ${team} [ ${line > 0 ? '+' : ''}${line} ] @ ${price} (${bookie.title})`;
                   
                   if (!spreadList.includes(formattedLine) && Math.abs(line) <= 3.5) {
@@ -220,7 +241,7 @@ function App() {
       
       const spreadsText = spreadList.length > 0 ? spreadList.join("\n") : "⚠️ No hay líneas asiáticas en la API. Usa DNB o Europeo.";
 
-      // 2. ENVIAR A PYTHON (Calculadora Manual)
+      // 3. Backend Matemático
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_manual`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -228,45 +249,54 @@ function App() {
       });
       const data = await res.json();
       
-      // 3. PROMPT MAESTRO (PARA CUALQUIER IA)
-      const prompt = `## 🎯 ROL: EXPERTO EN HÁNDICAP ASIÁTICO (BetSmart AI)
+      // 4. PROMPT MAESTRO DETALLADO (DEEP DIVE)
+      const prompt = `## 🕵️‍♂️ ROL: AUDITOR DE RIESGOS DEPORTIVOS (BetSmart AI)
 
-### 1. DATOS FINANCIEROS
-- **Bankroll:** $${bankroll}
-- **Stake 1/10:** $${(parseInt(bankroll)/70).toFixed(0)}
+### 1. 🏦 GESTIÓN DE CAPITAL
+- **Bankroll:** $${bankroll} COP
+- **Stake 1.4%:** $${(parseInt(bankroll)/70).toFixed(0)} COP
 
-### 2. EL PARTIDO
+### 2. 📋 EXPEDIENTE DEL PARTIDO
 - **Evento:** ${match.home_team} vs ${match.away_team}
-- **Torneo:** ${LEAGUES.find(l => l.code === selectedLeague)?.name}
+- **Liga:** ${getLeagueName(selectedLeague)}
+- **Cuotas 1X2:** 1:${oddHome} | X:${oddDraw} | 2:${oddAway}
 
-### 3. BASE MATEMÁTICA (ELO MANUAL REAL)
-- **ELO Local:** ${eloHome} | **ELO Visita:** ${eloAway}
-- **Diferencia Real (con localía):** ${data.math.elo_diff_adjusted} puntos.
-- **PROYECCIÓN:** El modelo estima que el **${data.math.favorito}** debería ganar por **${Math.abs(data.math.expected_goals_diff)} goles**.
+### 3. 🧠 LA VERDAD MATEMÁTICA (ELO REAL)
+He ingresado manualmente el ELO real de ClubElo/Oficial:
+- **ELO Local:** ${eloHome}
+- **ELO Visita:** ${eloAway}
+- **Diferencia Ajustada (Localía +100pts):** ${data.math.elo_diff_adjusted} puntos.
+- **PROYECCIÓN ALGORÍTMICA:** El **${data.math.favorito}** tiene una superioridad teórica para ganar por un margen de **${Math.abs(data.math.expected_goals_diff)} goles**.
 
-### 4. 📉 MENÚ DE HÁNDICAPS DISPONIBLES
-Aquí están las líneas que ofrece el mercado. Elige la que tenga más valor:
+### 4. 📉 MENÚ DE OPORTUNIDADES (HÁNDICAPS)
+Aquí están las líneas que ofrece el mercado. Tu trabajo es encontrar la "Línea Incorrecta":
 ${spreadsText}
 
 ---
 
-### 🕵️‍♂️ TU MISIÓN TÁCTICA (INVESTIGACIÓN WEB OBLIGATORIA):
+### 🔎 TU PROTOCOLO DE INVESTIGACIÓN OBLIGATORIO (Deep Search):
 
-1.  **CRUCE DE DATOS:**
-    - Mi matemática dice ventaja de **${data.math.expected_goals_diff} goles**.
-    - Mira el "Menú de Hándicaps". ¿Hay alguna línea mal puesta?
+Actúa como un detective. No asumas nada. Busca en Google/Bing y responde:
 
-2.  **INVESTIGACIÓN PROFUNDA (Busca en Google):**
-    - **H2H (Cara a Cara):** Busca los últimos 5 partidos entre ellos. ¿Hay paternidad?
-    - **Lesiones:** ¿Falta el goleador o el portero titular HOY?
-    - **Contexto:** ¿Hay cambios de técnico? ¿Problemas de vestuario?
-    - **Rotaciones:** Si es Copa, ¿juegan suplentes?
+#### A. VALIDACIÓN DE MOTIVACIÓN & ESTADO (Crucial):
+1.  **Calendario:** ¿Alguno jugó hace menos de 72 horas? ¿Tienen Champions la próxima semana? (Riesgo de rotación).
+2.  **Enfermería:** Busca "Lesionados ${match.home_team} hoy" y "Alineación probable ${match.away_team}". ¿Falta el goleador o el cerebro del equipo?
+3.  **La "Trampa" de la Copa:** Si es Copa, busca declaraciones del técnico. ¿Van con titulares o juveniles?
 
-3.  **VEREDICTO FINAL:**
-    - **Mejor Apuesta:** (Elige una línea del menú o DNB).
-    - **Stake:** (1-5).
-    - **Monto:** ($ Pesos).
-    - **Justificación:** Por qué esta línea es segura.`;
+#### B. ANÁLISIS DE ESTILOS (Táctico):
+- Si mi modelo sugiere goleada: ¿El favorito suele matar los partidos o gana 1-0 y se duerme?
+- Si mi modelo sugiere igualdad: ¿El underdog es un equipo "rocoso" que empata mucho?
+- **H2H:** ¿Cómo quedaron los últimos 3 partidos en este estadio?
+
+#### C. CÁLCULO DE VALOR FINAL:
+- Cruza mi **Proyección Matemática (${data.math.expected_goals_diff} goles)** con la realidad que investigaste.
+- ¿La línea del mercado es generosa?
+
+### 🏆 VEREDICTO DE INVERSIÓN:
+- **Selección:** (Elige la línea específica del menú o DNB).
+- **Stake (1-5):** (Ajusta según riesgo de lesiones/rotación).
+- **Monto:** ($ Pesos).
+- **Tesis de Inversión:** (Explica por qué la matemática y la realidad coinciden).`;
 
       setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
 
@@ -288,7 +318,7 @@ ${spreadsText}
       <div className="max-w-2xl mx-auto">
         <div className="border-b border-white/20 pb-4 mb-6 flex justify-between items-center">
             <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">SNIPER</span></h1>
-            <span className="text-[10px] text-gray-500">v25 FULL-MANUAL</span>
+            <span className="text-[10px] text-gray-500">v30 DEEP-SEARCH</span>
         </div>
 
         {/* CONTROLES */}
@@ -304,9 +334,15 @@ ${spreadsText}
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                     </div>
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">TORNEO</label>
-                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white">
-                            {LEAGUES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                        <label className="text-[10px] text-gray-500 block mb-1">LIGA / COPA</label>
+                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white cursor-pointer">
+                            {LEAGUE_GROUPS.map((group, idx) => (
+                                <optgroup key={idx} label={group.label}>
+                                    {group.leagues.map(l => (
+                                        <option key={l.code} value={l.code}>{l.name}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -336,7 +372,7 @@ ${spreadsText}
                     {!generatedPrompts[m.id] && (
                         <div className="flex gap-4 mb-4 mt-2 bg-[#111] p-3 rounded border border-white/5">
                             <div className="flex-1">
-                                <label className="text-[9px] text-emerald-500 block mb-1 font-bold text-center">ELO {m.home_team}</label>
+                                <label className="text-[9px] text-emerald-500 block mb-1 font-bold text-center">ELO LOCAL</label>
                                 <input 
                                     type="number" 
                                     placeholder="Ej: 1950" 
@@ -345,7 +381,7 @@ ${spreadsText}
                                 />
                             </div>
                             <div className="flex-1">
-                                <label className="text-[9px] text-emerald-500 block mb-1 font-bold text-center">ELO {m.away_team}</label>
+                                <label className="text-[9px] text-emerald-500 block mb-1 font-bold text-center">ELO VISITA</label>
                                 <input 
                                     type="number" 
                                     placeholder="Ej: 1720" 
