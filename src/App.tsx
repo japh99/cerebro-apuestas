@@ -4,7 +4,7 @@ import {
   Calendar, Globe, Wallet, BarChart2, 
   ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
   Flame, History, Swords, TrendingUp, Layers, ListFilter, Pencil, MapPin,
-  Plus, X, Trash2
+  Plus, X, Trash2, ChevronDown
 } from 'lucide-react';
 
 const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
@@ -63,7 +63,6 @@ const ODDS_API_KEYS = [
   "86de2f86b0b628024ef6d5546b479c0f"
 ];
 
-// 🌍 LISTA DE LIGAS
 const LEAGUE_GROUPS = [
   {
     label: "🏆 TORNEOS TOP",
@@ -100,16 +99,12 @@ const LEAGUE_GROUPS = [
     ]
   },
   {
-    label: "🇮🇹 ITALIA",
-    leagues: [{ code: 'soccer_italy_serie_a', name: 'Serie A' }]
-  },
-  {
-    label: "🇩🇪 ALEMANIA",
-    leagues: [{ code: 'soccer_germany_bundesliga', name: 'Bundesliga' }]
-  },
-  {
-    label: "🇫🇷 FRANCIA",
-    leagues: [{ code: 'soccer_france_ligue_one', name: 'Ligue 1' }]
+    label: "🇪🇺 EUROPA VARIOS",
+    leagues: [
+      { code: 'soccer_italy_serie_a', name: 'Serie A' },
+      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
+      { code: 'soccer_france_ligue_one', name: 'Ligue 1' }
+    ]
   }
 ];
 
@@ -125,10 +120,8 @@ function App() {
   const [generatedPrompts, setGeneratedPrompts] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   
-  // Estado para ELOs
   const [elos, setElos] = useState({});
-  
-  // Estado para LÍNEAS MANUALES (Lista dinámica)
+  // Estructura nueva: { matchId: [ { team: 'HOME', line: '-0.25', odds: '1.90' } ] }
   const [manualLines, setManualLines] = useState({}); 
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
@@ -151,18 +144,21 @@ function App() {
     }));
   };
 
-  // --- GESTIÓN DE LÍNEAS DINÁMICAS ---
+  // --- GESTIÓN DE LÍNEAS ESTRUCTURADAS ---
   const handleAddLine = (matchId) => {
     setManualLines(prev => ({
         ...prev,
-        [matchId]: [...(prev[matchId] || ["", ""]), ""] // Agrega una línea vacía
+        [matchId]: [...(prev[matchId] || [{ team: 'HOME', line: '', odds: '' }]), { team: 'HOME', line: '', odds: '' }]
     }));
   };
 
-  const handleLineChange = (matchId, index, value) => {
-    const currentLines = manualLines[matchId] || ["", ""];
+  const handleLineDataChange = (matchId, index, field, value) => {
+    const currentLines = manualLines[matchId] || [];
     const newLines = [...currentLines];
-    newLines[index] = value;
+    if (!newLines[index]) newLines[index] = { team: 'HOME', line: '', odds: '' };
+    
+    newLines[index] = { ...newLines[index], [field]: value };
+    
     setManualLines(prev => ({
         ...prev,
         [matchId]: newLines
@@ -170,8 +166,8 @@ function App() {
   };
 
   const handleRemoveLine = (matchId, index) => {
-    const currentLines = manualLines[matchId] || ["", ""];
-    if (currentLines.length <= 1) return; // Mantener al menos 1
+    const currentLines = manualLines[matchId] || [];
+    if (currentLines.length <= 1) return;
     const newLines = currentLines.filter((_, i) => i !== index);
     setManualLines(prev => ({
         ...prev,
@@ -200,10 +196,10 @@ function App() {
           return mDate >= start && mDate <= end;
       }).slice(0, 20);
 
-      // Inicializar líneas vacías para cada partido encontrado
+      // Inicializar una línea vacía por defecto
       const initialLines = {};
       valid.forEach(m => {
-          initialLines[m.id] = ["", ""]; // Dos campos vacíos por defecto
+          initialLines[m.id] = [{ team: 'HOME', line: '', odds: '' }];
       });
       setManualLines(initialLines);
 
@@ -212,7 +208,7 @@ function App() {
       if (valid.length === 0) {
           setStatus("SIN PARTIDOS.");
       } else {
-          setStatus(`✅ ${valid.length} EVENTOS. INGRESA DATOS.`);
+          setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
       }
 
     } catch (e: any) {
@@ -225,15 +221,15 @@ function App() {
     const eloAway = elos[match.id]?.away;
     const lines = manualLines[match.id] || [];
     
-    // Filtrar líneas vacías
-    const activeLines = lines.filter(l => l.trim() !== "");
+    // Filtrar líneas válidas (que tengan datos)
+    const activeLines = lines.filter(l => l.line && l.odds);
 
     if (!eloHome || !eloAway) {
         alert("⚠️ ATENCIÓN: Ingresa los ELOs.");
         return;
     }
     if (activeLines.length === 0) {
-        alert("⚠️ ATENCIÓN: Agrega al menos una línea de apuesta.");
+        alert("⚠️ ATENCIÓN: Completa al menos una línea de apuesta.");
         return;
     }
 
@@ -252,7 +248,10 @@ function App() {
         : "MODO EUROPA: Líneas asiáticas (0.25, 0.75). Gestión conservadora.";
 
       // Formatear lista de líneas para el prompt
-      const linesFormatted = activeLines.map((l, i) => `- Opción ${i + 1}: ${l}`).join("\n");
+      const linesFormatted = activeLines.map((l, i) => {
+          const teamName = l.team === 'HOME' ? match.home_team : match.away_team;
+          return `- Opción ${i + 1}: **${teamName}** [ ${l.line} ] @ ${l.odds}`;
+      }).join("\n");
 
       // 2. PROMPT MULTI-OPCIÓN
       const prompt = `## 🎯 ROL: GESTOR DE INVERSIONES (BetSmart AI)
@@ -272,8 +271,8 @@ function App() {
 - **Diferencia Ajustada:** ${data.math.elo_diff_adjusted} puntos.
 - **PROYECCIÓN:** El modelo estima que el **${data.math.favorito}** debería ganar por un margen de **${Math.abs(data.math.expected_goals_diff)} goles**.
 
-### 4. 📉 LÍNEAS DE MERCADO (LISTA DE OPCIONES)
-Aquí están las líneas que el usuario encontró. Analiza TODAS y dime cuál es la mejor:
+### 4. 📉 LÍNEAS DE MERCADO (CARTERA DE OPCIONES)
+El usuario ha seleccionado estas líneas manualmente de su casa de apuestas:
 ${linesFormatted}
 
 ---
@@ -281,8 +280,8 @@ ${linesFormatted}
 ### 🕵️‍♂️ TU MISIÓN TÁCTICA (BUSCAR EN INTERNET):
 
 1.  **ANÁLISIS COMPARATIVO:**
-    - Cruza mi ventaja matemática (${data.math.expected_goals_diff} goles) con CADA UNA de las opciones de la lista.
-    - ¿Cuál ofrece la mejor relación Riesgo/Beneficio?
+    - Cruza mi ventaja matemática (${data.math.expected_goals_diff} goles) con las Opciones.
+    - ¿Cuál cubre mejor el riesgo?
 
 2.  **CONTEXTO DEPORTIVO (Investiga):** 
     - **H2H:** Historial reciente.
@@ -318,21 +317,11 @@ ${linesFormatted}
         <div className="flex justify-between items-center mb-6 border-b border-white/20 pb-4">
             <div>
                 <h1 className="text-xl font-bold text-emerald-500 tracking-widest">HANDICAP<span className="text-white">CONTROL</span></h1>
-                <span className="text-[10px] text-gray-500">v33 MULTI-LINE</span>
+                <span className="text-[10px] text-gray-500">v34 STRUCTURED</span>
             </div>
             <div className="flex bg-[#111] rounded-lg p-1 border border-white/10">
-                <button 
-                    onClick={() => setMarketMode('LATAM')}
-                    className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${marketMode === 'LATAM' ? 'bg-emerald-600 text-white' : 'text-gray-500'}`}
-                >
-                    LATAM
-                </button>
-                <button 
-                    onClick={() => setMarketMode('EUROPA')}
-                    className={`px-3 py-1 rounded text-[10px] font-bold transition-all ${marketMode === 'EUROPA' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}
-                >
-                    EURO
-                </button>
+                <button onClick={() => setMarketMode('LATAM')} className={`px-3 py-1 rounded text-[10px] font-bold ${marketMode === 'LATAM' ? 'bg-emerald-600 text-white' : 'text-gray-500'}`}>LATAM</button>
+                <button onClick={() => setMarketMode('EUROPA')} className={`px-3 py-1 rounded text-[10px] font-bold ${marketMode === 'EUROPA' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>EURO</button>
             </div>
         </div>
 
@@ -345,7 +334,7 @@ ${linesFormatted}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="text-[10px] text-gray-500 block mb-1">FECHA INICIO</label>
+                        <label className="text-[10px] text-gray-500 block mb-1">FECHA</label>
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
                     </div>
                     <div>
@@ -378,6 +367,7 @@ ${linesFormatted}
                         <span className="px-2 text-gray-600 text-xs">vs</span>
                         <span className="flex-1 text-right">{m.away_team}</span>
                     </div>
+                    
                     <div className="text-[10px] text-gray-500 mb-4 text-center">
                         {new Date(m.commence_time).toLocaleString()}
                     </div>
@@ -386,50 +376,61 @@ ${linesFormatted}
                         <div className="space-y-4">
                             {/* ELO */}
                             <div className="flex gap-2">
-                                <input 
-                                    type="number" placeholder="ELO Local" 
-                                    onChange={(e) => handleEloChange(m.id, 'home', e.target.value)}
-                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded focus:border-emerald-500 outline-none"
-                                />
-                                <input 
-                                    type="number" placeholder="ELO Visita" 
-                                    onChange={(e) => handleEloChange(m.id, 'away', e.target.value)}
-                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded focus:border-emerald-500 outline-none"
-                                />
+                                <input type="number" placeholder="ELO Local" onChange={(e) => handleEloChange(m.id, 'home', e.target.value)} className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-emerald-500"/>
+                                <input type="number" placeholder="ELO Visita" onChange={(e) => handleEloChange(m.id, 'away', e.target.value)} className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-emerald-500"/>
                             </div>
 
-                            {/* LÍNEAS DINÁMICAS */}
+                            {/* LÍNEAS DINÁMICAS (FORMULARIO) */}
                             <div className="bg-[#111] p-3 rounded border border-white/5">
                                 <label className="text-[9px] text-gray-500 block mb-2 font-bold uppercase flex justify-between items-center">
-                                    <span>LÍNEAS DE APUESTA</span>
-                                    <span className="text-[8px] bg-white/10 px-1 rounded">AGREGA LAS QUE QUIERAS</span>
+                                    <span>CARTERA DE APUESTAS</span>
+                                    <span className="text-[8px] bg-white/10 px-1 rounded">MÁXIMO CONTROL</span>
                                 </label>
                                 
                                 <div className="space-y-2">
-                                    {(manualLines[m.id] || ["", ""]).map((line, idx) => (
-                                        <div key={idx} className="flex gap-2">
+                                    {(manualLines[m.id] || []).map((line, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            {/* Selector de Equipo */}
+                                            <div className="relative w-1/3">
+                                                <select 
+                                                    value={line.team} 
+                                                    onChange={(e) => handleLineDataChange(m.id, idx, 'team', e.target.value)}
+                                                    className="w-full bg-black border border-white/20 p-2 text-[10px] text-white rounded appearance-none outline-none focus:border-indigo-500"
+                                                >
+                                                    <option value="HOME">{m.home_team}</option>
+                                                    <option value="AWAY">{m.away_team}</option>
+                                                </select>
+                                                <ChevronDown size={10} className="absolute right-2 top-3 text-gray-500 pointer-events-none"/>
+                                            </div>
+
+                                            {/* Input Hándicap */}
                                             <input 
                                                 type="text" 
-                                                placeholder={`Opción ${idx + 1} (Ej: Local -1.5 @ 2.10)`}
-                                                value={line}
-                                                onChange={(e) => handleLineChange(m.id, idx, e.target.value)}
-                                                className="w-full bg-black border border-white/20 p-2 text-xs text-white rounded focus:border-indigo-500 outline-none"
+                                                placeholder="Línea (Ej: -0.25)"
+                                                value={line.line}
+                                                onChange={(e) => handleLineDataChange(m.id, idx, 'line', e.target.value)}
+                                                className="w-1/3 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none focus:border-indigo-500"
                                             />
-                                            <button 
-                                                onClick={() => handleRemoveLine(m.id, idx)}
-                                                className="bg-red-900/30 text-red-500 p-2 rounded hover:bg-red-900/50"
-                                            >
+
+                                            {/* Input Cuota */}
+                                            <input 
+                                                type="number" 
+                                                placeholder="Cuota (Ej: 1.90)"
+                                                value={line.odds}
+                                                onChange={(e) => handleLineDataChange(m.id, idx, 'odds', e.target.value)}
+                                                className="w-1/4 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none focus:border-emerald-500"
+                                            />
+
+                                            {/* Botón Borrar */}
+                                            <button onClick={() => handleRemoveLine(m.id, idx)} className="text-red-500 hover:bg-red-900/20 p-2 rounded">
                                                 <Trash2 size={12}/>
                                             </button>
                                         </div>
                                     ))}
                                 </div>
                                 
-                                <button 
-                                    onClick={() => handleAddLine(m.id)}
-                                    className="mt-2 w-full py-1.5 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded text-[10px] text-gray-400 flex items-center justify-center gap-1 transition"
-                                >
-                                    <Plus size={10}/> AGREGAR OTRA LÍNEA
+                                <button onClick={() => handleAddLine(m.id)} className="mt-3 w-full py-1.5 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded text-[10px] text-gray-400 flex items-center justify-center gap-1 transition">
+                                    <Plus size={10}/> AGREGAR OTRA OPCIÓN
                                 </button>
                             </div>
 
@@ -440,7 +441,7 @@ ${linesFormatted}
                     ) : (
                         <div className="animate-in fade-in">
                             <div className="mb-2 p-2 bg-emerald-900/20 rounded border border-emerald-500/20 text-center">
-                                <p className="text-[10px] text-emerald-400 font-bold">PROMPT CREADO ({regionMode})</p>
+                                <p className="text-[10px] text-emerald-400 font-bold">PROMPT CREADO ({marketMode})</p>
                             </div>
                             <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`w-full py-3 text-xs font-bold rounded ${copiedId === m.id ? 'bg-emerald-600 text-white' : 'bg-white text-black'}`}>
                                 {copiedId === m.id ? "COPIADO" : "COPIAR ANÁLISIS"}
