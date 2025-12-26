@@ -63,7 +63,7 @@ const ODDS_API_KEYS = [
   "86de2f86b0b628024ef6d5546b479c0f"
 ];
 
-// 🌍 CONFIGURACIÓN POR DEPORTE
+// 🌍 CONFIGURACIÓN MAESTRA DE DEPORTES Y LIGAS
 const SPORTS_CONFIG = {
   soccer: {
     name: "FÚTBOL",
@@ -72,12 +72,66 @@ const SPORTS_CONFIG = {
     ratingName: "ELO",
     metric: "Goles",
     leagues: [
-      { code: 'soccer_uefa_champs_league', name: 'Champions League' },
-      { code: 'soccer_epl', name: 'Premier League' },
-      { code: 'soccer_spain_la_liga', name: 'La Liga' },
-      { code: 'soccer_conmebol_copa_libertadores', name: 'Libertadores' },
-      { code: 'soccer_italy_serie_a', name: 'Serie A' },
-      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' }
+      // --- 🏆 INTERNACIONAL ---
+      { code: 'soccer_uefa_champs_league', name: '🇪🇺 UEFA Champions League' },
+      { code: 'soccer_uefa_europa_league', name: '🇪🇺 UEFA Europa League' },
+      { code: 'soccer_uefa_europa_conference_league', name: '🇪🇺 Conference League' },
+      { code: 'soccer_conmebol_copa_libertadores', name: '🌎 Copa Libertadores' },
+      { code: 'soccer_conmebol_copa_sudamericana', name: '🌎 Copa Sudamericana' },
+
+      // --- 🇬🇧 INGLATERRA ---
+      { code: 'soccer_epl', name: '🇬🇧 Premier League' },
+      { code: 'soccer_efl_champ', name: '🇬🇧 Championship (2ª)' },
+      { code: 'soccer_england_league1', name: '🇬🇧 League One (3ª)' },
+      { code: 'soccer_england_league2', name: '🇬🇧 League Two (4ª)' },
+      { code: 'soccer_england_efl_cup', name: '🇬🇧 EFL Cup (Carabao)' },
+      { code: 'soccer_fa_cup', name: '🇬🇧 FA Cup' },
+
+      // --- 🇪🇸 ESPAÑA ---
+      { code: 'soccer_spain_la_liga', name: '🇪🇸 La Liga' },
+      { code: 'soccer_spain_segunda_division', name: '🇪🇸 La Liga 2' },
+      { code: 'soccer_spain_copa_del_rey', name: '🇪🇸 Copa del Rey' },
+
+      // --- 🇮🇹 ITALIA ---
+      { code: 'soccer_italy_serie_a', name: '🇮🇹 Serie A' },
+      { code: 'soccer_italy_serie_b', name: '🇮🇹 Serie B' },
+      { code: 'soccer_italy_coppa_italia', name: '🇮🇹 Coppa Italia' },
+
+      // --- 🇩🇪 ALEMANIA ---
+      { code: 'soccer_germany_bundesliga', name: '🇩🇪 Bundesliga' },
+      { code: 'soccer_germany_bundesliga2', name: '🇩🇪 2. Bundesliga' },
+      { code: 'soccer_germany_dfb_pokal', name: '🇩🇪 DFB Pokal' },
+
+      // --- 🇫🇷 FRANCIA ---
+      { code: 'soccer_france_ligue_one', name: '🇫🇷 Ligue 1' },
+      { code: 'soccer_france_ligue_two', name: '🇫🇷 Ligue 2' },
+      { code: 'soccer_france_coupe_de_france', name: '🇫🇷 Coupe de France' },
+
+      // --- 🌎 AMÉRICA ---
+      { code: 'soccer_brazil_campeonato', name: '🇧🇷 Brasileirão A' },
+      { code: 'soccer_brazil_serie_b', name: '🇧🇷 Brasileirão B' },
+      { code: 'soccer_argentina_primera_division', name: '🇦🇷 Liga Profesional' },
+      { code: 'soccer_mexico_ligamx', name: '🇲🇽 Liga MX' },
+      { code: 'soccer_usa_mls', name: '🇺🇸 MLS' },
+      { code: 'soccer_chile_campeonato', name: '🇨🇱 Primera Chile' },
+
+      // --- 🇪🇺 RESTO EUROPA ---
+      { code: 'soccer_portugal_primeira_liga', name: '🇵🇹 Primeira Liga' },
+      { code: 'soccer_netherlands_eredivisie', name: '🇳🇱 Eredivisie' },
+      { code: 'soccer_turkey_super_league', name: '🇹🇷 Süper Lig' },
+      { code: 'soccer_belgium_first_div', name: '🇧🇪 Pro League' },
+      { code: 'soccer_scotland_premiership', name: '🏴󠁧󠁢󠁳󠁣󠁴󠁿 Premiership' },
+      { code: 'soccer_austria_bundesliga', name: '🇦🇹 Bundesliga' },
+      { code: 'soccer_denmark_superliga', name: '🇩🇰 Superliga' },
+      { code: 'soccer_norway_eliteserien', name: '🇳🇴 Eliteserien' },
+      { code: 'soccer_sweden_allsvenskan', name: '🇸🇪 Allsvenskan' },
+      { code: 'soccer_switzerland_superleague', name: '🇨🇭 Super League' },
+      { code: 'soccer_greece_super_league', name: '🇬🇷 Super League' },
+
+      // --- 🌏 ASIA ---
+      { code: 'soccer_japan_j_league', name: '🇯🇵 J League' },
+      { code: 'soccer_korea_kleague1', name: '🇰🇷 K League 1' },
+      { code: 'soccer_china_superleague', name: '🇨🇳 Super League' }
     ]
   },
   nba: {
@@ -87,8 +141,8 @@ const SPORTS_CONFIG = {
     ratingName: "POWER RATING",
     metric: "Puntos",
     leagues: [
-      { code: 'basketball_nba', name: 'NBA' },
-      { code: 'basketball_euroleague', name: 'Euroliga' }
+      { code: 'basketball_nba', name: '🇺🇸 NBA' },
+      { code: 'basketball_euroleague', name: '🇪🇺 Euroliga' }
     ]
   },
   mlb: {
@@ -98,7 +152,8 @@ const SPORTS_CONFIG = {
     ratingName: "TEAM RATING",
     metric: "Carreras",
     leagues: [
-      { code: 'baseball_mlb', name: 'MLB' } // (Nota: MLB no activa en Dic/Ene)
+      { code: 'baseball_mlb', name: '🇺🇸 MLB' },
+      { code: 'baseball_npb', name: '🇯🇵 NPB (Japón)' }
     ]
   }
 };
@@ -107,9 +162,9 @@ const getRandomKey = () => ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEY
 
 function App() {
   // --- NAVEGACIÓN ---
-  const [currentSport, setCurrentSport] = useState(null); // null = Home
+  const [currentSport, setCurrentSport] = useState(null); 
   
-  // --- ESTADOS DE LA APP ---
+  // --- ESTADOS ---
   const [matches, setMatches] = useState([]);
   const [status, setStatus] = useState("LISTO");
   const [analyzingId, setAnalyzingId] = useState(null);
@@ -123,7 +178,7 @@ function App() {
   const [selectedLeague, setSelectedLeague] = useState('');
   const [bankroll, setBankroll] = useState("50000");
 
-  // Resetear al cambiar de deporte
+  // Reset al cambiar deporte
   const selectSport = (sportKey) => {
     setCurrentSport(sportKey);
     setMatches([]);
@@ -131,7 +186,7 @@ function App() {
     setRatings({});
     setManualLines({});
     setSelectedLeague(SPORTS_CONFIG[sportKey].leagues[0].code);
-    setStatus(`MODO ${SPORTS_CONFIG[sportKey].name} ACTIVO`);
+    setStatus(`MODO ${SPORTS_CONFIG[sportKey].name}`);
   };
 
   const handleRatingChange = (matchId, team, value) => {
@@ -170,7 +225,7 @@ function App() {
     try {
       const apiKey = getRandomKey();
       
-      // La URL depende del deporte (spreads para todos)
+      // La URL depende del deporte
       const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
       
       const res = await fetch(url);
@@ -186,7 +241,7 @@ function App() {
           return mDate >= start && mDate <= end;
       }).slice(0, 20);
 
-      // Inicializar líneas vacías
+      // Inicializar líneas
       const initialLines = {};
       valid.forEach(m => {
           initialLines[m.id] = [{ team: 'HOME', line: '', odds: '' }];
@@ -216,14 +271,13 @@ function App() {
 
     setAnalyzingId(match.id);
     try {
-      // Enviar tipo de deporte al backend para usar la fórmula correcta
       const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_manual`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ 
             elo_home: rHome, 
             elo_away: rAway,
-            sport: currentSport // 'soccer', 'nba' o 'mlb'
+            sport: currentSport 
         })
       });
       const data = await res.json();
@@ -239,17 +293,17 @@ function App() {
           sportInstructions = `
           - **H2H:** Busca historial reciente.
           - **Lesiones:** ¿Falta el goleador?
-          - **Contexto:** ¿Es Copa o Liga?`;
+          - **Contexto:** ¿Es Copa (rotaciones) o Liga?
+          - **Localía:** ¿Hay altura o viaje largo?`;
       } else if (currentSport === 'nba') {
           sportInstructions = `
-          - **FATIGA (Clave):** ¿Es Back-to-Back? ¿3er juego en 4 noches?
-          - **ESTRELLAS:** Busca "NBA Injury Report Today". ¿Juegan los titulares?
-          - **MATCHUP:** ¿Cómo defiende el local al mejor jugador rival?`;
+          - **FATIGA (Clave):** ¿Es Back-to-Back?
+          - **ESTRELLAS:** Busca "NBA Injury Report". ¿Juegan todos?
+          - **MATCHUP:** Defensa vs Ataque.`;
       } else if (currentSport === 'mlb') {
           sportInstructions = `
-          - **PITCHERS:** Busca "Starting Pitchers today". Compara su ERA y WHIP.
-          - **BULLPEN:** ¿Están descansados los relevistas?
-          - **CLIMA:** ¿Viento a favor de Home Run?`;
+          - **PITCHERS:** Busca "Starting Pitchers today".
+          - **BULLPEN:** ¿Están descansados?`;
       }
 
       const prompt = `## 🎯 ROL: GESTOR DE INVERSIONES ${config.name} (BetSmart AI)
@@ -390,7 +444,7 @@ ${linesFormatted}
                     
                     {!generatedPrompts[m.id] ? (
                         <div className="space-y-4">
-                            {/* INPUTS DE RATING (Diferente nombre según deporte) */}
+                            {/* INPUTS DE RATING */}
                             <div className="flex gap-2">
                                 <input 
                                     type="number" placeholder={`${config.ratingName} Local`} 
@@ -424,7 +478,7 @@ ${linesFormatted}
                                                 <ChevronDown size={10} className="absolute right-2 top-3 text-gray-500 pointer-events-none"/>
                                             </div>
                                             <input 
-                                                type="text" placeholder="Línea (Ej: -5.5)"
+                                                type="text" placeholder="Línea (Ej: -1.5)"
                                                 value={line.line}
                                                 onChange={(e) => handleLineDataChange(m.id, idx, 'line', e.target.value)}
                                                 className="w-1/3 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none"
