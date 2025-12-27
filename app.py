@@ -1,62 +1,45 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
+import sys
+
+# Agrega la carpeta 'engines' al path para poder importarlos
+sys.path.append(os.path.join(os.path.dirname(__file__), 'engines'))
+
+# Importa los motores específicos de cada deporte
+import footballEngine as fb_engine
+# import nbaEngine as nba_engine # Descomentar cuando lo crees
+# import baseballEngine as bb_engine # Descomentar cuando lo crees
 
 app = Flask(__name__)
 CORS(app)
 
-# --- MOTORES MATEMÁTICOS ---
+# --- RUTAS DE LA API ---
 
-def calculate_expected_margin(elo_home, elo_away):
-    """
-    Convierte la diferencia de ELO en goles de ventaja esperada.
-    Fórmula estándar: Diferencia / 140 = Goles de ventaja.
-    """
-    # Ajuste de campo: +100 puntos al local (Estándar en apuestas)
-    diff = (int(elo_home) + 100) - int(elo_away)
-    return round(diff / 140.0, 2), diff
-
-# --- RUTA PRINCIPAL (MODO MANUAL) ---
+# Ruta principal para el análisis (el Front-End llama a esta)
 @app.route('/analizar_manual', methods=['POST'])
 def analizar_manual():
-    try:
-        data = request.json
-        # Recibimos los ELOs que tú escribiste manualmente en la web
-        elo_h = data.get('elo_home')
-        elo_a = data.get('elo_away')
-        
-        if not elo_h or not elo_a:
-            return jsonify({"error": "Faltan datos de ELO"}), 400
-        
-        # Cálculo matemático puro
-        margin, diff_adjusted = calculate_expected_margin(elo_h, elo_a)
-        
-        # Determinar favorito matemático para el texto
-        favorito = "LOCAL" if margin > 0 else "VISITA"
-        
-        return jsonify({
-            "status": "success",
-            "math": {
-                "elo_diff_adjusted": diff_adjusted,
-                "expected_goals_diff": margin,
-                "favorito": favorito
-            }
-        })
+    data = request.json
+    sport = data.get('sport', 'soccer') # El Front-End ahora dirá qué deporte es
+    
+    if sport == 'soccer':
+        return jsonify(fb_engine.analyze_football_handicap(data))
+    # elif sport == 'nba':
+    #     return jsonify(nba_engine.analyze_nba_handicap(data)) # Activar para NBA
+    # elif sport == 'mlb':
+    #     return jsonify(bb_engine.analyze_baseball_handicap(data)) # Activar para MLB
+    else:
+        return jsonify({"error": "Deporte no soportado o módulo no activo"}), 400
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# --- RUTA DE SINCRONIZACIÓN (Para que no de error el escaneo inicial) ---
+# Ruta de sincronización (para que el Front-End no de error 404)
 @app.route('/sincronizar-cache', methods=['POST'])
 def sync():
-    # En modo manual no necesitamos guardar caché, pero respondemos OK
-    # para que el frontend no se queje al cargar los partidos.
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "message": "Datos recibidos (modo manual)"})
 
-# --- RUTA DE SALUD (KEEP ALIVE) ---
+# Ruta de salud (para el robot de Keep-Alive)
 @app.route('/', methods=['GET'])
 def home(): 
-    return "CALCULADORA MANUAL ONLINE", 200
+    return "CAPITAL SHIELD HUB ONLINE", 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
