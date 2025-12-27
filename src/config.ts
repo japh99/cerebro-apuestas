@@ -1,5 +1,3 @@
-// src/config.ts
-
 export const PYTHON_BACKEND_URL = "https://cerebro-apuestas.onrender.com"; 
 
 export const ODDS_API_KEYS = [
@@ -60,41 +58,72 @@ export const getRandomKey = () => {
   return ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 };
 
-export const SPORTS_CONFIG = {
-  soccer: {
-    name: "FÚTBOL",
-    color: "emerald",
-    ratingName: "ELO",
-    metric: "Goles",
+// 🌍 LISTA COMPLETA DE LIGAS (RECUPERADA)
+export const SOCCER_LEAGUE_GROUPS = [
+  {
+    label: "🏆 TORNEOS TOP",
     leagues: [
       { code: 'soccer_uefa_champs_league', name: 'Champions League' },
+      { code: 'soccer_uefa_europa_league', name: 'Europa League' },
+      { code: 'soccer_conmebol_copa_libertadores', name: 'Copa Libertadores' },
+      { code: 'soccer_conmebol_copa_sudamericana', name: 'Copa Sudamericana' }
+    ]
+  },
+  {
+    label: "🇬🇧 INGLATERRA",
+    leagues: [
       { code: 'soccer_epl', name: 'Premier League' },
+      { code: 'soccer_efl_champ', name: 'Championship' },
+      { code: 'soccer_england_efl_cup', name: 'EFL Cup (Carabao)' },
+      { code: 'soccer_fa_cup', name: 'FA Cup' }
+    ]
+  },
+  {
+    label: "🇪🇸 ESPAÑA",
+    leagues: [
       { code: 'soccer_spain_la_liga', name: 'La Liga' },
-      { code: 'soccer_conmebol_copa_libertadores', name: 'Libertadores' },
+      { code: 'soccer_spain_segunda_division', name: 'La Liga 2' },
+      { code: 'soccer_spain_copa_del_rey', name: 'Copa del Rey' }
+    ]
+  },
+  {
+    label: "🇮🇹 ITALIA",
+    leagues: [
       { code: 'soccer_italy_serie_a', name: 'Serie A' },
+      { code: 'soccer_italy_serie_b', name: 'Serie B' },
+      { code: 'soccer_italy_coppa_italia', name: 'Coppa Italia' }
+    ]
+  },
+  {
+    label: "🇩🇪 ALEMANIA",
+    leagues: [
       { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
+      { code: 'soccer_germany_dfb_pokal', name: 'DFB Pokal' }
+    ]
+  },
+  {
+    label: "🇫🇷 FRANCIA",
+    leagues: [
+      { code: 'soccer_france_ligue_one', name: 'Ligue 1' },
+      { code: 'soccer_france_coupe_de_france', name: 'Coupe de France' }
+    ]
+  },
+  {
+    label: "🌎 AMÉRICA",
+    leagues: [
+      { code: 'soccer_brazil_campeonato', name: 'Brasileirão A' },
+      { code: 'soccer_argentina_primera_division', name: 'Liga Argentina' },
+      { code: 'soccer_mexico_ligamx', name: 'Liga MX' },
       { code: 'soccer_usa_mls', name: 'MLS' },
-      { code: 'soccer_mexico_ligamx', name: 'Liga MX' }
+      { code: 'soccer_chile_campeonato', name: 'Chile Primera' }
     ]
   },
-  nba: {
-    name: "BALONCESTO",
-    color: "orange",
-    ratingName: "POWER RATING",
-    metric: "Puntos",
+  {
+    label: "🇪🇺 RESTO EUROPA",
     leagues: [
-      { code: 'basketball_nba', name: 'NBA' },
-      { code: 'basketball_euroleague', name: 'Euroliga' }
-    ]
-  },
-  mlb: {
-    name: "BÉISBOL",
-    color: "blue",
-    ratingName: "TEAM RATING",
-    metric: "Carreras",
-    leagues: [
-      { code: 'baseball_mlb', name: 'MLB' },
-      { code: 'baseball_npb', name: 'NPB (Japón)' }
+      { code: 'soccer_portugal_primeira_liga', name: 'Primeira Liga' },
+      { code: 'soccer_netherlands_eredivisie', name: 'Eredivisie' },
+      { code: 'soccer_turkey_super_league', name: 'Süper Lig' }
     ]
   }
-};
+];
