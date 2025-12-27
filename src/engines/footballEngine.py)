@@ -1,0 +1,27 @@
+import math
+
+# --- LÓGICA DE FÚTBOL ---
+
+def calculate_soccer_math(elo_home, elo_away):
+    """
+    Calcula la ventaja en GOLES basada en ELO.
+    Fórmula: Diferencia / 140 = Goles de ventaja.
+    """
+    try:
+        # +100 puntos por localía estándar en fútbol
+        diff_raw = int(elo_home) - int(elo_away) + 100
+        
+        # 140 puntos de diferencia ~ 1 gol de ventaja teórica
+        expected_margin = round(diff_raw / 140.0, 2)
+        
+        favorito = "LOCAL" if expected_margin > 0 else "VISITA"
+        
+        return {
+            "sport": "soccer",
+            "elo_diff_adjusted": diff_raw,
+            "expected_margin": expected_margin,
+            "unit": "goles",
+            "favorito": favorito
+        }
+    except Exception as e:
+        return {"error": str(e)}
