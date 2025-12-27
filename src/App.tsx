@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, ChevronLeft } from 'lucide-react';
 import Soccer from './modules/Soccer';
-import Nba from './modules/Nba'; // <--- IMPORTAMOS NBA
+import Nba from './modules/Nba'; // <--- IMPORTAMOS EL NUEVO MODULO
 
 function App() {
   const [module, setModule] = useState<string | null>(null);
@@ -26,7 +26,7 @@ function App() {
         {!module ? (
            // MENU PRINCIPAL
            <div className="grid grid-cols-1 gap-6">
-              {/* FUTBOL */}
+              {/* BOTON FUTBOL */}
               <button onClick={() => setModule('soccer')} className="p-6 bg-[#111] border border-white/10 rounded-2xl hover:border-emerald-500/50 hover:bg-emerald-900/10 transition group flex items-center gap-4">
                  <div className="text-4xl grayscale group-hover:grayscale-0">⚽</div>
                  <div className="text-left">
@@ -35,7 +35,7 @@ function App() {
                  </div>
               </button>
               
-              {/* NBA */}
+              {/* BOTON NBA (AHORA ACTIVO) */}
               <button onClick={() => setModule('nba')} className="p-6 bg-[#111] border border-white/10 rounded-2xl hover:border-orange-500/50 hover:bg-orange-900/10 transition group flex items-center gap-4">
                  <div className="text-4xl grayscale group-hover:grayscale-0">🏀</div>
                  <div className="text-left">
@@ -44,7 +44,7 @@ function App() {
                  </div>
               </button>
 
-              {/* MLB (Futuro) */}
+              {/* BOTON MLB (AUN INACTIVO) */}
               <button className="p-6 bg-[#111] border border-white/10 rounded-2xl opacity-50 cursor-not-allowed flex items-center gap-4">
                  <div className="text-4xl">⚾</div>
                  <div className="text-left">
@@ -55,10 +55,10 @@ function App() {
            </div>
         ) : (
            // CARGAR MÓDULO
-           <>
+           <div className="animate-in fade-in zoom-in-95 duration-300">
              {module === 'soccer' && <Soccer />}
              {module === 'nba' && <Nba />}
-           </>
+           </div>
         )}
       </div>
     </div>
