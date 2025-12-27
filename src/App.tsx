@@ -1,96 +1,429 @@
 import React, { useState } from 'react';
-import { Shield, ChevronLeft, Activity, Dumbbell, Target } from 'lucide-react';
-import Soccer from './modules/Soccer';
-import Nba from './modules/Nba'; 
+import { 
+  Activity, RefreshCw, Zap, Search, Copy, Check, 
+  Calendar, Globe, Wallet, BarChart2, 
+  ChevronRight, DollarSign, Shield, MousePointerClick, AlertTriangle,
+  Flame, History, Swords, TrendingUp, Layers, ListFilter, Pencil, MapPin,
+  Plus, X, Trash2, ChevronDown, Trophy, Home, Dumbbell, Target
+} from 'lucide-react';
+
+// CAMBIO CLAVE: Ahora apuntamos a la carpeta /api interna de Vercel
+const PYTHON_BACKEND_URL = "/api"; 
+
+// 🔑 TUS LLAVES
+const ODDS_API_KEYS = [
+  "PEGA_TU_KEY_ODDS_1",
+  "PEGA_TU_KEY_ODDS_2",
+  "PEGA_TU_KEY_ODDS_3"
+];
+
+// 🌍 CONFIGURACIÓN MAESTRA DE MÓDULOS
+const SPORTS_CONFIG = {
+  soccer: {
+    name: "FÚTBOL",
+    icon: <Activity size={40}/>,
+    color: "emerald",
+    ratingName: "ELO",
+    metric: "Goles",
+    leagues: [
+      { code: 'soccer_uefa_champs_league', name: 'Champions League' },
+      { code: 'soccer_epl', name: 'Premier League' },
+      { code: 'soccer_spain_la_liga', name: 'La Liga' },
+      { code: 'soccer_conmebol_copa_libertadores', name: 'Libertadores' },
+      { code: 'soccer_italy_serie_a', name: 'Serie A' },
+      { code: 'soccer_germany_bundesliga', name: 'Bundesliga' },
+      { code: 'soccer_usa_mls', name: 'MLS' },
+      { code: 'soccer_mexico_ligamx', name: 'Liga MX' }
+    ]
+  },
+  nba: {
+    name: "BALONCESTO",
+    icon: <Dumbbell size={40}/>,
+    color: "orange",
+    ratingName: "POWER RATING",
+    metric: "Puntos",
+    leagues: [
+      { code: 'basketball_nba', name: 'NBA' },
+      { code: 'basketball_euroleague', name: 'Euroliga' }
+    ]
+  },
+  mlb: {
+    name: "BÉISBOL",
+    icon: <Target size={40}/>,
+    color: "blue",
+    ratingName: "TEAM RATING",
+    metric: "Carreras",
+    leagues: [
+      { code: 'baseball_mlb', name: 'MLB' },
+      { code: 'baseball_npb', name: 'NPB (Japón)' }
+    ]
+  }
+};
+
+const getRandomKey = () => ODDS_API_KEYS[Math.floor(Math.random() * ODDS_API_KEYS.length)];
 
 function App() {
-  const [module, setModule] = useState<string | null>(null);
+  // --- NAVEGACIÓN ---
+  const [currentSport, setCurrentSport] = useState(null); // null = Home
+  
+  // --- ESTADOS DE LA APP ---
+  const [matches, setMatches] = useState([]);
+  const [status, setStatus] = useState("LISTO");
+  const [analyzingId, setAnalyzingId] = useState(null);
+  const [generatedPrompts, setGeneratedPrompts] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
+  
+  const [ratings, setRatings] = useState({});
+  const [manualLines, setManualLines] = useState({}); 
+
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); 
+  const [selectedLeague, setSelectedLeague] = useState('');
+  const [bankroll, setBankroll] = useState("50000");
+
+  // Resetear al cambiar de deporte
+  const selectSport = (sportKey) => {
+    setCurrentSport(sportKey);
+    setMatches([]);
+    setGeneratedPrompts({});
+    setRatings({});
+    setManualLines({});
+    // Preseleccionar primera liga
+    setSelectedLeague(SPORTS_CONFIG[sportKey].leagues[0].code);
+    setStatus(`MODO ${SPORTS_CONFIG[sportKey].name}`);
+  };
+
+  const handleRatingChange = (matchId, team, value) => {
+    setRatings(prev => ({
+        ...prev,
+        [matchId]: { ...prev[matchId], [team]: value }
+    }));
+  };
+
+  // Gestión de líneas dinámicas
+  const handleAddLine = (matchId) => {
+    setManualLines(prev => ({
+        ...prev,
+        [matchId]: [...(prev[matchId] || [{ team: 'HOME', line: '', odds: '' }]), { team: 'HOME', line: '', odds: '' }]
+    }));
+  };
+
+  const handleLineDataChange = (matchId, index, field, value) => {
+    const currentLines = manualLines[matchId] || [];
+    const newLines = [...currentLines];
+    if (!newLines[index]) newLines[index] = { team: 'HOME', line: '', odds: '' };
+    newLines[index] = { ...newLines[index], [field]: value };
+    setManualLines(prev => ({ ...prev, [matchId]: newLines }));
+  };
+
+  const handleRemoveLine = (matchId, index) => {
+    const currentLines = manualLines[matchId] || [];
+    if (currentLines.length <= 1) return;
+    const newLines = currentLines.filter((_, i) => i !== index);
+    setManualLines(prev => ({ ...prev, [matchId]: newLines }));
+  };
+
+  const escanear = async () => {
+    setMatches([]); setGeneratedPrompts({}); setRatings({}); setManualLines({});
+    setStatus("ESCANEO INICIADO...");
+    try {
+      const apiKey = getRandomKey();
+      
+      // URL Universal
+      const url = `https://api.the-odds-api.com/v4/sports/${selectedLeague}/odds/?apiKey=${apiKey}&regions=eu,us&markets=h2h,spreads&oddsFormat=decimal`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!Array.isArray(data)) throw new Error(data.message || "Error API");
+
+      const valid = data.filter((m: any) => {
+          const mDate = new Date(m.commence_time);
+          const start = new Date(selectedDate);
+          const end = new Date(selectedDate);
+          end.setDate(end.getDate() + 3); 
+          return mDate >= start && mDate <= end;
+      }).slice(0, 20);
+
+      // Inicializar líneas
+      const initialLines = {};
+      valid.forEach(m => {
+          initialLines[m.id] = [{ team: 'HOME', line: '', odds: '' }];
+      });
+      setManualLines(initialLines);
+
+      setMatches(valid);
+      
+      if (valid.length === 0) setStatus("SIN PARTIDOS.");
+      else setStatus(`✅ ${valid.length} EVENTOS ENCONTRADOS`);
+
+    } catch (e: any) {
+      setStatus(`❌ ERROR: ${e.message}`);
+    }
+  };
+
+  const generarPrompt = async (match: any) => {
+    const rHome = ratings[match.id]?.home;
+    const rAway = ratings[match.id]?.away;
+    const lines = manualLines[match.id] || [];
+    const activeLines = lines.filter(l => l.line && l.odds);
+    
+    const config = SPORTS_CONFIG[currentSport];
+
+    if (!rHome || !rAway) { alert(`⚠️ Faltan los ${config.ratingName}.`); return; }
+    if (activeLines.length === 0) { alert("⚠️ Faltan líneas de apuesta."); return; }
+
+    setAnalyzingId(match.id);
+    try {
+      // 1. CÁLCULO MATEMÁTICO (Enviar deporte al backend)
+      const res = await fetch(`${PYTHON_BACKEND_URL}/analizar_manual`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            elo_home: rHome, 
+            elo_away: rAway,
+            sport: currentSport 
+        })
+      });
+      const data = await res.json();
+      
+      const linesFormatted = activeLines.map((l, i) => {
+          const teamName = l.team === 'HOME' ? match.home_team : match.away_team;
+          return `- Opción ${i + 1}: **${teamName}** [ ${l.line} ] @ ${l.odds}`;
+      }).join("\n");
+
+      // --- CONTEXTO ESPECÍFICO POR DEPORTE ---
+      let sportInstructions = "";
+      if (currentSport === 'soccer') {
+          sportInstructions = `
+          - **H2H:** Busca historial reciente.
+          - **Lesiones:** ¿Falta el goleador?
+          - **Contexto:** ¿Es Copa (rotaciones) o Liga?
+          - **Localía:** ¿Hay altura o viaje largo?`;
+      } else if (currentSport === 'nba') {
+          sportInstructions = `
+          - **FATIGA (Clave):** ¿Es Back-to-Back? ¿3er juego en 4 noches?
+          - **ESTRELLAS:** Busca "NBA Injury Report Today". ¿Juegan todos?
+          - **MATCHUP:** ¿Cómo defiende el local al mejor jugador rival?`;
+      } else if (currentSport === 'mlb') {
+          sportInstructions = `
+          - **PITCHERS:** Busca "Starting Pitchers today". Compara su ERA y WHIP.
+          - **BULLPEN:** ¿Están descansados los relevistas?
+          - **CLIMA:** ¿Viento a favor de Home Run?`;
+      }
+
+      const prompt = `## 🎯 ROL: GESTOR DE INVERSIONES ${config.name} (BetSmart AI)
+
+### 1. ⚙️ CAPITAL
+- **Bankroll:** $${bankroll} COP
+- **Stake Base:** $${(parseInt(bankroll)/70).toFixed(0)} COP
+
+### 2. 📋 EL EVENTO
+- **Deporte:** ${config.name}
+- **Partido:** ${match.home_team} vs ${match.away_team}
+- **Competición:** ${config.leagues.find(l => l.code === selectedLeague)?.name}
+- **Fecha:** ${new Date(match.commence_time).toLocaleString()}
+
+### 3. 🧠 ANÁLISIS MATEMÁTICO (${config.ratingName})
+- **${config.ratingName} Local:** ${rHome} | **Visita:** ${rAway}
+- **Diferencia Ajustada:** ${data.math.elo_diff_adjusted} pts.
+- **PROYECCIÓN:** El modelo estima que el **${data.math.favorito}** debería ganar por un margen de **${Math.abs(data.math.expected_margin)} ${data.math.unit}**.
+
+### 4. 📉 LÍNEAS DE MERCADO
+${linesFormatted}
+
+---
+
+### 🕵️‍♂️ TU MISIÓN TÁCTICA (BUSCAR EN INTERNET):
+
+1.  **ANÁLISIS MATEMÁTICO:**
+    - Cruza mi ventaja matemática (${data.math.expected_margin} ${data.math.unit}) con las Opciones.
+    - ¿Cuál línea tiene valor?
+
+2.  **INVESTIGACIÓN OBLIGATORIA (Browsing):**
+    ${sportInstructions}
+
+3.  **VEREDICTO FINAL:** 
+    - **Mejor Línea:** (Elige UNA).
+    - **Stake:** (1-5).
+    - **Monto:** ($ Pesos).
+    - **Razón:** (Matemática + Contexto).`;
+
+      setGeneratedPrompts(prev => ({...prev, [match.id]: prompt}));
+
+    } catch (e) {
+      alert("Error analizando: " + e.message);
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
+
+  const copiar = (id: any, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // --- VISTA: SELECCIÓN DE DEPORTE ---
+  if (!currentSport) {
+      return (
+          <div className="min-h-screen bg-black text-white p-6 flex flex-col items-center justify-center font-mono">
+              <div className="mb-10 text-center">
+                  <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
+                      <Shield size={40} className="text-emerald-500"/> Capital<span className="text-emerald-500">Shield</span>
+                  </h1>
+                  <p className="text-slate-500 tracking-widest text-xs uppercase">Multi-Sport Arbitrage & Value System</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+                  {Object.entries(SPORTS_CONFIG).map(([key, conf]) => (
+                      <button 
+                          key={key}
+                          onClick={() => selectSport(key)}
+                          className={`group relative p-8 rounded-2xl border border-white/10 bg-[#111] hover:bg-[#151515] transition-all hover:-translate-y-2 hover:shadow-2xl hover:shadow-${conf.color}-500/20`}
+                      >
+                          <div className={`text-6xl mb-4 grayscale group-hover:grayscale-0 transition-all flex justify-center`}>{conf.icon}</div>
+                          <h2 className="text-2xl font-bold mb-2 text-center">{conf.name}</h2>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider text-center">Motor {conf.ratingName}</p>
+                          <div className={`absolute bottom-0 left-0 w-full h-1 bg-${conf.color}-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300`}></div>
+                      </button>
+                  ))}
+              </div>
+          </div>
+      );
+  }
+
+  // --- VISTA: DASHBOARD DEPORTE ---
+  const config = SPORTS_CONFIG[currentSport];
 
   return (
-    <div className="min-h-screen bg-[#050505] text-gray-200 font-mono p-4 relative overflow-hidden">
-      
-      {/* Background Grid Sutil */}
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
-
-      {/* NAVBAR */}
-      <div className="relative z-10 max-w-5xl mx-auto flex justify-between items-center mb-12 border-b border-white/10 pb-6 pt-4">
-          <div className="flex items-center gap-3">
-            {module && (
-                <button onClick={() => setModule(null)} className="bg-white/5 p-2 rounded-full hover:bg-white/10 transition-colors border border-white/5">
-                    <ChevronLeft className="text-gray-300"/>
-                </button>
-            )}
-            <div>
-                <h1 className="text-2xl font-black text-white tracking-tighter flex items-center gap-2">
-                    <Shield className="text-emerald-500 fill-emerald-500/20" size={32}/> 
-                    CAPITAL<span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-500">SHIELD</span>
-                </h1>
-                <p className="text-[10px] text-gray-500 uppercase tracking-[0.3em] pl-1 font-bold">Intelligent Sports Trading</p>
+    <div className="min-h-screen bg-black text-gray-200 font-mono p-4">
+      <div className="max-w-2xl mx-auto">
+        
+        {/* HEADER */}
+        <div className="border-b border-white/20 pb-4 mb-6 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+                <button onClick={() => setCurrentSport(null)} className="bg-[#222] p-2 rounded hover:bg-[#333] transition-colors"><ChevronRight className="rotate-180" size={16}/></button>
+                <h1 className="text-xl font-bold tracking-widest text-white">{config.name}<span className={`text-${config.color}-500`}>PRO</span></h1>
             </div>
-          </div>
-          <div className="hidden md:block px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] text-gray-400 font-mono">
-             v36.0 STABLE
-          </div>
-      </div>
+            <span className="text-[10px] text-gray-500">MÓDULO ACTIVO</span>
+        </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto">
-        {!module ? (
-           // MENU PRINCIPAL (HUB)
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
-              
-              {/* FÚTBOL CARD (ACTIVA) */}
-              <button 
-                onClick={() => setModule('soccer')} 
-                className="group relative h-64 bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 flex flex-col justify-end overflow-hidden transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(16,185,129,0.15)] hover:border-emerald-500/50"
-              >
-                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
-                 <div className="absolute top-0 right-0 p-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-emerald-500/20"></div>
-                 
-                 <div className="relative z-10 text-left">
-                    <div className="text-5xl mb-4 grayscale group-hover:grayscale-0 transition-all duration-500 transform group-hover:-translate-y-2">⚽</div>
-                    <h2 className="text-3xl font-black text-white mb-2 group-hover:text-emerald-400 transition-colors">FÚTBOL</h2>
-                    <p className="text-xs text-gray-500 group-hover:text-gray-300 border-l-2 border-white/10 pl-3 group-hover:border-emerald-500 transition-all">
-                        Motor ELO • Hándicap Asiático • Copas
-                    </p>
-                 </div>
-              </button>
-              
-              {/* NBA CARD (AHORA ACTIVA 🏀) */}
-              <button 
-                onClick={() => setModule('nba')}
-                className="group relative h-64 bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 flex flex-col justify-end overflow-hidden transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_0_50px_rgba(249,115,22,0.15)] hover:border-orange-500/50"
-              >
-                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-90"></div>
-                 <div className="absolute top-0 right-0 p-32 bg-orange-500/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all group-hover:bg-orange-500/20"></div>
-                 
-                 <div className="relative z-10 text-left">
-                    <div className="text-5xl mb-4 grayscale group-hover:grayscale-0 transition-all duration-500 transform group-hover:-translate-y-2">🏀</div>
-                    <h2 className="text-3xl font-black text-white mb-2 group-hover:text-orange-400 transition-colors">NBA</h2>
-                    <p className="text-xs text-gray-500 group-hover:text-gray-300 border-l-2 border-white/10 pl-3 group-hover:border-orange-500 transition-all">
-                        Power Ratings • Fatiga • Spreads
-                    </p>
-                 </div>
-              </button>
+        {/* CONTROLES */}
+        <div className="bg-[#111] p-4 border border-white/10 rounded-lg mb-6">
+            <div className="grid grid-cols-1 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">FECHA</label>
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
+                    </div>
+                    <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">COMPETICIÓN</label>
+                        <select value={selectedLeague} onChange={(e) => setSelectedLeague(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white cursor-pointer">
+                            {config.leagues.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">CAPITAL (COP)</label>
+                    <input type="number" value={bankroll} onChange={(e) => setBankroll(e.target.value)} className="w-full bg-black border border-white/20 p-2 text-sm text-white"/>
+                </div>
+            </div>
+            <button onClick={escanear} className="w-full bg-white text-black font-bold py-3 rounded hover:bg-gray-200 transition">
+                {status.includes("...") ? <RefreshCw className="animate-spin inline mr-2"/> : <Search className="inline mr-2"/>}
+                {status}
+            </button>
+        </div>
 
-              {/* MLB CARD (INACTIVA) */}
-              <button className="group relative h-64 bg-[#0a0a0a] border border-white/5 rounded-3xl p-8 flex flex-col justify-end overflow-hidden opacity-50 cursor-not-allowed">
-                 <div className="relative z-10 text-left">
-                    <div className="text-5xl mb-4 text-blue-500/30">⚾</div>
-                    <h2 className="text-3xl font-black text-white/30 mb-2">MLB</h2>
-                    <p className="text-xs text-gray-700 font-mono uppercase tracking-widest">
-                        Próximamente
-                    </p>
-                 </div>
-              </button>
+        {/* LISTA DE PARTIDOS */}
+        <div className="space-y-4">
+            {matches.map((m: any) => (
+                <div key={m.id} className="bg-[#0a0a0a] border border-white/10 p-5 rounded-lg hover:border-white/30 transition relative">
+                    
+                    <div className="flex justify-between items-center text-sm font-bold text-white mb-2">
+                        <span className="flex-1">{m.home_team}</span>
+                        <span className="px-2 text-gray-600 text-xs">vs</span>
+                        <span className="flex-1 text-right">{m.away_team}</span>
+                    </div>
+                    
+                    <div className="text-[10px] text-gray-500 mb-4 text-center">
+                        {new Date(m.commence_time).toLocaleString()}
+                    </div>
+                    
+                    {!generatedPrompts[m.id] ? (
+                        <div className="space-y-4">
+                            {/* INPUTS DE RATING (Diferente nombre según deporte) */}
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" placeholder={`${config.ratingName} Local`} 
+                                    onChange={(e) => handleRatingChange(m.id, 'home', e.target.value)}
+                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-white"
+                                />
+                                <input 
+                                    type="number" placeholder={`${config.ratingName} Visita`} 
+                                    onChange={(e) => handleRatingChange(m.id, 'away', e.target.value)}
+                                    className="w-full bg-black border border-white/20 p-2 text-center text-white text-xs rounded outline-none focus:border-white"
+                                />
+                            </div>
 
-           </div>
-        ) : (
-           // CARGAR MÓDULO SELECCIONADO
-           <div className="animate-in fade-in zoom-in-95 duration-300 px-2">
-             {module === 'soccer' && <Soccer />}
-             {module === 'nba' && <Nba />}
-           </div>
-        )}
+                            {/* LÍNEAS DINÁMICAS */}
+                            <div className="bg-[#111] p-3 rounded border border-white/5">
+                                <label className="text-[9px] text-gray-500 block mb-2 font-bold uppercase flex justify-between items-center">
+                                    <span>LÍNEAS DE APUESTA</span>
+                                </label>
+                                <div className="space-y-2">
+                                    {(manualLines[m.id] || []).map((line: any, idx: number) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <div className="relative w-1/3">
+                                                <select 
+                                                    value={line.team} 
+                                                    onChange={(e) => handleLineDataChange(m.id, idx, 'team', e.target.value)}
+                                                    className="w-full bg-black border border-white/20 p-2 text-[10px] text-white rounded appearance-none outline-none"
+                                                >
+                                                    <option value="HOME">{m.home_team}</option>
+                                                    <option value="AWAY">{m.away_team}</option>
+                                                </select>
+                                                <ChevronDown size={10} className="absolute right-2 top-3 text-gray-500 pointer-events-none"/>
+                                            </div>
+                                            <input 
+                                                type="text" placeholder="Línea (-5.5)"
+                                                value={line.line}
+                                                onChange={(e) => handleLineDataChange(m.id, idx, 'line', e.target.value)}
+                                                className="w-1/3 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none"
+                                            />
+                                            <input 
+                                                type="number" placeholder="Cuota"
+                                                value={line.odds}
+                                                onChange={(e) => handleLineDataChange(m.id, idx, 'odds', e.target.value)}
+                                                className="w-1/4 bg-black border border-white/20 p-2 text-xs text-white rounded text-center outline-none"
+                                            />
+                                            <button onClick={() => handleRemoveLine(m.id, idx)} className="text-red-500 hover:bg-red-900/20 p-2 rounded">
+                                                <Trash2 size={12}/>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => handleAddLine(m.id)} className="mt-3 w-full py-1.5 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded text-[10px] text-gray-400 flex items-center justify-center gap-1 transition">
+                                    <Plus size={10}/> AGREGAR LÍNEA
+                                </button>
+                            </div>
+
+                            <button onClick={() => generarPrompt(m)} className="w-full border border-dashed border-white/20 py-3 text-xs text-emerald-400 hover:bg-emerald-900/10 transition flex items-center justify-center gap-2">
+                                <Pencil size={12}/> PROCESAR
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="animate-in fade-in">
+                            <div className="mb-2 p-2 bg-emerald-900/20 rounded border border-emerald-500/20 text-center">
+                                <p className="text-[10px] text-emerald-400 font-bold">ANÁLISIS LISTO</p>
+                            </div>
+                            <button onClick={() => copiar(m.id, generatedPrompts[m.id])} className={`w-full py-3 text-xs font-bold rounded ${copiedId === m.id ? 'bg-emerald-600 text-white' : 'bg-white text-black'}`}>
+                                {copiedId === m.id ? "COPIADO" : "COPIAR AL CHAT"}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
       </div>
     </div>
   );
